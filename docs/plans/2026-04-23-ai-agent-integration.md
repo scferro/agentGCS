@@ -10,14 +10,39 @@
 
 ---
 
+## PR Breakdown Summary
+
+**Principle:** Every PR does ONE thing and has a clear test/verification. More small PRs are better than fewer large ones.
+
+| PR | Phase | Tasks | Scope | Test Method | Est. Size |
+|----|-------|-------|-------|-------------|-----------|
+| 1 | 0 | 0.1 | Add llama.cpp as CMake subproject | Build `llama` target in Docker | Tiny |
+| 2 | 0 | 0.2 | Create AIAgent module skeleton | Build `AIAgentModule` target | Small |
+| 3 | 1 | 1.1 | LLMEngine model loading + unloading | CTest: load a GGUF model | Small |
+| 4 | 1 | 1.2 | LLMEngine streaming completion | CTest: token signals fire | Small |
+| 5 | 1 | 1.3 | LLMEngine tool calling support | CTest: tool call parsed + emitted | Small |
+| 6 | 2 | 2.1 | AgentToolBase + Registry | CTest: filtering logic | Small |
+| 7 | 2 | 2.2 | 7 mission "add" tools | CTest: schema + availability | Medium |
+| 8 | 2 | 2.3–2.4 | 4 edit tools + 5 guided tools | CTest: schema + availability | Medium |
+| 9 | 3 | 3.1 | AgentController with ReAct loop | CTest: mock LLM cycle | Medium |
+| 10 | 3 | 3.2 | System prompts + context injection | CTest: expected key presence | Small |
+| 11 | 4 | 4.4 | SlideToAccept widget | qmllint + manual drag test | Tiny |
+| 12 | 4 | 4.2–4.3 | ChatView + ActionCard | qmllint + manual | Small |
+| 13 | 4 | 4.1+4.5 | Sidebar + MainWindow integration | qmllint + X11 visual | Small |
+| 14 | 5 | 5.1–5.2 | Settings panel + model downloader | Persist test + small download | Medium |
+| 15 | 6 | 6.1–6.3 | Safety validator + map overlay + multimodal stub | CTest safety + manual map | Medium |
+
+**Total: 15 PRs, 23 tasks**
+
+---
+
 ## Phase 0 — Build Infrastructure & Dependencies
 
-### Task 0.1: Add llama.cpp as a CMake subproject
+### Task 0.1 [PR 1]: Add llama.cpp as a CMake subproject
 
 **Objective:** Make llama.cpp buildable as a static library from within the agentGCS CMake tree.
 
 **Files:**
-- Create: `cmake/FindLlamaCpp.cmake` (or use `add_subdirectory`)
 - Modify: `CMakeLists.txt` (top-level, ~line 50)
 
 **Step 1: Add llama.cpp as subdirectory in top-level CMakeLists.txt**
@@ -44,6 +69,8 @@ cmake --build . --target llama 2>&1 | tail -5
 ```
 Expected: ` Built target llama ` (the static library compiles)
 
+**Test/Verification:** Docker build succeeds, `llama` static lib target exists.
+
 **Step 3: Commit**
 
 ```bash
@@ -53,13 +80,17 @@ git commit -m "build: add llama.cpp as CMake subproject"
 
 ---
 
-### Task 0.2: Create the AIAgent module skeleton
+### Task 0.2 [PR 2]: Create the AIAgent module skeleton
 
 **Objective:** Create the `src/AIAgent/` directory with CMakeLists.txt following QGC's module pattern, and wire it into the build.
 
 **Files:**
 - Create: `src/AIAgent/CMakeLists.txt`
-- Modify: `src/CMakeLists.txt` (add `add_subdirectory(AIAgent)` and link target)
+- Create: `src/AIAgent/AIAgentSidebar.qml` (stub)
+- Create: `src/AIAgent/AIAgentChatView.qml` (stub)
+- Create: `src/AIAgent/AIAgentActionCard.qml` (stub)
+- Create: `src/AIAgent/AIAgentSlideToAccept.qml` (stub)
+- Modify: `src/CMakeLists.txt`
 
 **Step 1: Create src/AIAgent/CMakeLists.txt**
 
@@ -109,12 +140,9 @@ Create minimal stub files so the build succeeds:
 - `src/AIAgent/AIAgentActionCard.qml` — same pattern
 - `src/AIAgent/AIAgentSlideToAccept.qml` — same pattern
 
-**Step 4: Verify build**
+**Test/Verification:** `cmake --build . 2>&1 | grep -i "aiagent\|error" | head -20` — AIAgentModule builds with no errors.
 
-Run: `cmake --build . 2>&1 | grep -i "aiagent\|error" | head -20`
-Expected: AIAgentModule builds with no errors.
-
-**Step 5: Commit**
+**Step 4: Commit**
 
 ```bash
 git add src/AIAgent/ src/CMakeLists.txt
@@ -125,13 +153,14 @@ git commit -m "feat: add AIAgent module skeleton with CMake build"
 
 ## Phase 1 — LLM Engine (C++ Backend)
 
-### Task 1.1: Create LLMEngine class — model loading and context
+### Task 1.1 [PR 3]: Create LLMEngine class — model loading and context
 
 **Objective:** Wrap llama.cpp's model loading and context creation in a Qt-friendly C++ class.
 
 **Files:**
 - Create: `src/AIAgent/LLMEngine.h`
 - Create: `src/AIAgent/LLMEngine.cpp`
+- Modify: `src/AIAgent/CMakeLists.txt` (add SOURCES)
 
 **Step 1: Write LLMEngine.h**
 
@@ -200,23 +229,32 @@ private:
 **Step 2: Write LLMEngine.cpp — model loading**
 
 Implement `loadModel()` using:
-- `llama_model_load_from_file(path.toUtf8().constData(), params)` 
+- `llama_model_load_from_file(path.toUtf8().constData(), params)`
 - `llama_init_from_model(model, ctx_params)`
 - `common_chat_templates_init(model, "")` for chat template support
 - Set `llama_model_params.n_gpu_layers = m_gpuLayers`
 
 Implement `unloadModel()` using `llama_free(ctx)` and `llama_model_free(model)`.
 
-**Step 3: Commit**
+**Step 3: Write CTest**
+
+Create `test/AIAgent/test_llm_engine_load.cpp`:
+- Verify `LLMEngine` constructs without crash
+- Verify `loadModel()` with a non-existent path returns false and emits `loadFailed`
+- (Optional) If a tiny test GGUF model is available, verify it loads and `isLoaded` becomes true
+
+**Test/Verification:** CTest passes. `LLMEngine` compiles, constructs, and reject/load behavior is validated.
+
+**Step 4: Commit**
 
 ```bash
-git add src/AIAgent/LLMEngine.h src/AIAgent/LLMEngine.cpp
+git add src/AIAgent/LLMEngine.h src/AIAgent/LLMEngine.cpp src/AIAgent/CMakeLists.txt test/AIAgent/
 git commit -m "feat: add LLMEngine class for model loading and context management"
 ```
 
 ---
 
-### Task 1.2: Add chat completion with token streaming
+### Task 1.2 [PR 4]: Add chat completion with token streaming
 
 **Objective:** Implement the core completion loop with streaming token emission and chat template formatting.
 
@@ -253,16 +291,26 @@ Q_INVOKABLE void cancelCompletion();
 
 The completion loop must run on a QThread to avoid blocking the UI. Add a `QThread m_workerThread` member, move LLMEngine to it via `moveToThread()`.
 
-**Step 4: Commit**
+**Step 4: Write CTest**
+
+Create `test/AIAgent/test_llm_engine_streaming.cpp`:
+- Test with a small GGUF model: call `startCompletion()` with a simple message
+- Verify `tokenGenerated` signals fire (use QSignalSpy)
+- Verify `generationComplete` fires at end
+- Verify `cancelCompletion()` stops generation mid-stream
+
+**Test/Verification:** CTest passes. Token signals emit in correct order.
+
+**Step 5: Commit**
 
 ```bash
-git add src/AIAgent/
-git commit -m "feat: add streaming chat completion with tool call detection"
+git add src/AIAgent/ test/AIAgent/
+git commit -m "feat: add streaming chat completion with token streaming"
 ```
 
 ---
 
-### Task 1.3: Add tool definition schema support
+### Task 1.3 [PR 5]: Add tool definition schema support
 
 **Objective:** Allow the LLM to understand available tools via the chat template's tool-calling format.
 
@@ -284,10 +332,20 @@ struct AgentTool {
 
 In `startCompletion()`, convert `AgentTool` list to `common_chat_tool` structs and pass them via `common_chat_templates_inputs.tools`. The Gemma 4 chat template in the GGUF metadata handles the rest — `COMMON_CHAT_FORMAT_PEG_GEMMA4` in llama.cpp's common/chat.h explicitly supports Gemma 4 tool calling format.
 
-**Step 3: Commit**
+**Step 3: Write CTest**
+
+Create `test/AIAgent/test_llm_engine_tool_calling.cpp`:
+- Register 1–2 test tools with `AgentTool` structs
+- Feed a Gemma 4 formatted conversation that triggers a tool call
+- Verify `toolCallDetected(name, args)` signal fires with correct tool name and parsed JSON args
+- Verify a non-tool-call response does NOT trigger `toolCallDetected`
+
+**Test/Verification:** CTest passes. Tool calls are correctly parsed and emitted.
+
+**Step 4: Commit**
 
 ```bash
-git add src/AIAgent/
+git add src/AIAgent/ test/AIAgent/
 git commit -m "feat: add tool definition schema support for Gemma 4 tool calling"
 ```
 
@@ -295,7 +353,7 @@ git commit -m "feat: add tool definition schema support for Gemma 4 tool calling
 
 ## Phase 2 — Tool Registry (C++ Port of mav-agent Tools)
 
-### Task 2.1: Create AgentTool base class and registry
+### Task 2.1 [PR 6]: Create AgentTool base class and registry
 
 **Objective:** Define the C++ equivalent of mav-agent's `MAVLinkToolBase` and a registry that filters tools by vehicle type and mode.
 
@@ -303,6 +361,7 @@ git commit -m "feat: add tool definition schema support for Gemma 4 tool calling
 - Create: `src/AIAgent/AgentToolBase.h`
 - Create: `src/AIAgent/AgentToolRegistry.h`
 - Create: `src/AIAgent/AgentToolRegistry.cpp`
+- Modify: `src/AIAgent/CMakeLists.txt`
 
 **Step 1: Write AgentToolBase.h**
 
@@ -345,16 +404,27 @@ Mirrors mav-agent's `get_tools_for_mode()` / `_filter_tools_for_vehicle()` patte
 - Command mode: only "add" tools (add_waypoint, add_takeoff, add_loiter, add_survey, add_rtl, add_land, add_transition)
 - Mission mode: all 11 tools (the above + update, delete, move, reorder)
 
-**Step 3: Commit**
+**Step 3: Write CTest**
+
+Create `test/AIAgent/test_agent_tool_registry.cpp`:
+- Register 3 stub tools with different mode/vehicle availability
+- `testMissionModeGetsAllTools()` — verify all 3 returned
+- `testCommandModeExcludesEditTools()` — verify edit-only tool excluded
+- `testGroundVehicleExcludesLoiter()` — verify vehicle filtering
+- `testGetToolDefinitionsReturnsValidJsonSchema()` — verify each tool's `parametersJson` is valid JSON
+
+**Test/Verification:** CTest passes all 4+ filtering tests.
+
+**Step 4: Commit**
 
 ```bash
-git add src/AIAgent/AgentToolBase.h src/AIAgent/AgentToolRegistry.h src/AIAgent/AgentToolRegistry.cpp
+git add src/AIAgent/AgentToolBase.h src/AIAgent/AgentToolRegistry.h src/AIAgent/AgentToolRegistry.cpp src/AIAgent/CMakeLists.txt test/AIAgent/
 git commit -m "feat: add AgentTool base class and registry with mode/vehicle filtering"
 ```
 
 ---
 
-### Task 2.2: Implement mission-item tools (add_waypoint, add_takeoff, add_loiter, add_rtl, add_survey, add_land, add_transition)
+### Task 2.2 [PR 7]: Implement mission-item tools (7 add tools)
 
 **Objective:** Port the 7 "add" tools from mav-agent, executing against QGC's `PlanMasterController` and `MissionController` APIs.
 
@@ -406,24 +476,41 @@ Parse args for latitude, longitude, altitude (relative). Use `activeVehicle()->h
 
 **Step 3: Update CMakeLists.txt for Tools subdirectory**
 
-**Step 4: Commit**
+**Step 4: Write CTest**
+
+Create `test/AIAgent/test_add_tools.cpp`:
+- For each of the 7 tools: verify `name()` matches expected string
+- For each tool: verify `parametersJson()` is valid JSON schema (parse with nlohmann/json, check `type` and `properties` keys exist)
+- For each tool: verify `availableInMode()` and `availableForVehicle()` return expected bools
+- `testAddWaypointSchemaHasLatLonAlt()` — check specific schema fields
+
+**Test/Verification:** CTest passes. All 7 tools have valid schemas and correct availability.
+
+**Step 5: Commit**
 
 ```bash
-git add src/AIAgent/Tools/ src/AIAgent/CMakeLists.txt
+git add src/AIAgent/Tools/ src/AIAgent/CMakeLists.txt test/AIAgent/
 git commit -m "feat: implement 7 mission-item add tools ported from mav-agent"
 ```
 
 ---
 
-### Task 2.3: Implement editing tools (update, delete, move, reorder)
+### Task 2.3–2.4 [PR 8]: Implement editing tools + guided action tools
 
-**Objective:** Port the 4 editing tools that only appear in mission mode.
+**Objective:** Port the 4 editing tools (mission-mode only) and 5 guided action tools (command-mode with live vehicle).
 
 **Files:**
 - Create: `src/AIAgent/Tools/UpdateMissionItemTool.h/.cpp`
 - Create: `src/AIAgent/Tools/DeleteMissionItemTool.h/.cpp`
 - Create: `src/AIAgent/Tools/MoveItemTool.h/.cpp`
 - Create: `src/AIAgent/Tools/ReorderItemTool.h/.cpp`
+- Create: `src/AIAgent/Tools/GuidedTakeoffTool.h/.cpp`
+- Create: `src/AIAgent/Tools/GuidedGoToTool.h/.cpp`
+- Create: `src/AIAgent/Tools/GuidedRTLTool.h/.cpp`
+- Create: `src/AIAgent/Tools/GuidedLandTool.h/.cpp`
+- Create: `src/AIAgent/Tools/GuidedOrbitTool.h/.cpp`
+
+**Edit tools:**
 
 | Tool | QGC API to call |
 |------|----------------|
@@ -434,52 +521,47 @@ git commit -m "feat: implement 7 mission-item add tools ported from mav-agent"
 
 All 4 set `availableInMode("mission")` only and are excluded from command mode.
 
-**Step 1: Implement each tool**
-
-**Step 2: Commit**
-
-```bash
-git add src/AIAgent/Tools/
-git commit -m "feat: implement 4 mission editing tools (update, delete, move, reorder)"
-```
-
----
-
-### Task 2.4: Implement command-mode guided actions
-
-**Objective:** For command mode (one-shot actions on a connected vehicle), tools should issue guided commands directly via Vehicle's API rather than building mission items.
-
-**Files:**
-- Create: `src/AIAgent/Tools/GuidedTakeoffTool.h/.cpp`
-- Create: `src/AIAgent/Tools/GuidedGoToTool.h/.cpp`
-- Create: `src/AIAgent/Tools/GuidedRTLTool.h/.cpp`
-- Create: `src/AIAgent/Tools/GuidedLandTool.h/.cpp`
-- Create: `src/AIAgent/Tools/GuidedOrbitTool.h/.cpp`
+**Guided tools:**
 
 These wrap `Vehicle::guidedModeTakeoff()`, `Vehicle::guidedModeGotoLocation()`, `Vehicle::guidedModeRTL()`, `Vehicle::guidedModeLand()`, `Vehicle::guidedModeOrbit()`. They stage the action for user approval rather than executing immediately.
 
-**Step 1: Implement each guided tool**
+**Step 1: Implement each edit tool**
 
-**Step 2: Register in AgentToolRegistry — these replace add_* tools when vehicle is connected and in command mode**
+**Step 2: Implement each guided tool**
 
-**Step 3: Commit**
+**Step 3: Register in AgentToolRegistry — guided tools replace add_* tools when vehicle is connected and in command mode**
+
+**Step 4: Write CTest**
+
+Create `test/AIAgent/test_edit_and_guided_tools.cpp`:
+- For each of 9 tools: verify `name()` matches expected string
+- For each tool: verify `parametersJson()` is valid JSON schema
+- For edit tools: verify `availableInMode("mission")` is true, `availableInMode("command")` is false
+- For guided tools: verify `availableInMode("command")` is true
+- `testVehicleAvailability()` — verify guided tools available for correct vehicle types
+
+**Test/Verification:** CTest passes. All 9 tools validated.
+
+**Step 5: Commit**
 
 ```bash
-git add src/AIAgent/Tools/
-git commit -m "feat: implement guided action tools for command mode with live vehicle"
+git add src/AIAgent/Tools/ test/AIAgent/
+git commit -m "feat: implement 4 mission editing tools + 5 guided action tools"
 ```
 
 ---
 
 ## Phase 3 — Agent Controller (ReAct Loop)
 
-### Task 3.1: Create AgentController class
+### Task 3.1 [PR 9]: Create AgentController class
 
 **Objective:** Orchestrate the ReAct (Reason+Act) loop: user message → LLM reasoning → tool call → tool result → LLM reasoning → ... → final response.
 
 **Files:**
 - Create: `src/AIAgent/AgentController.h`
 - Create: `src/AIAgent/AgentController.cpp`
+- Create: `src/AIAgent/MockLLMEngine.h` (for testing)
+- Modify: `src/AIAgent/CMakeLists.txt`
 
 **Step 1: Write AgentController.h**
 
@@ -549,7 +631,7 @@ User sends message
   → Call LLM with all messages + available tools
   → LLM responds:
     Case A: Text only → display to user, done
-    Case B: Tool call → 
+    Case B: Tool call →
       → Stage action for approval (with description of what it does)
       → Wait for user approval
       → If approved: execute tool, append tool result to messages
@@ -562,16 +644,33 @@ User sends message
 When user switches to PlanView: set mode="mission", load mission tools.
 When user switches to FlyView with connected vehicle: set mode="command", load guided tools.
 
-**Step 4: Commit**
+**Step 4: Write CTest with MockLLMEngine**
+
+Create `test/AIAgent/test_react_loop.cpp`:
+
+A `MockLLMEngine` that returns scripted responses:
+1. First call: returns a tool call for `add_waypoint`
+2. After tool result: returns a text summary
+
+Test cases:
+- `testSingleToolCallAndResponse()` — verify full cycle: send → tool call → stage → approve → execute → LLM re-call → text response
+- `testActionApprovalAndExecution()` — verify approved action executes tool
+- `testActionRejection()` — verify rejected action appends "rejected" message, LLM re-called
+- `testSafetyBlock()` — (placeholder, fails until PR 15)
+- `testModeSwitchingClearsState()` — verify mode change resets pending actions and chat
+
+**Test/Verification:** CTest passes. Full ReAct cycle validated with mock LLM.
+
+**Step 5: Commit**
 
 ```bash
-git add src/AIAgent/AgentController.h src/AIAgent/AgentController.cpp
+git add src/AIAgent/AgentController.h src/AIAgent/AgentController.cpp src/AIAgent/MockLLMEngine.h src/AIAgent/CMakeLists.txt test/AIAgent/
 git commit -m "feat: add AgentController with ReAct loop and action approval staging"
 ```
 
 ---
 
-### Task 3.2: System prompt and context injection
+### Task 3.2 [PR 10]: System prompt and context injection
 
 **Objective:** Port mav-agent's system prompts and add real-time vehicle state context.
 
@@ -589,10 +688,20 @@ Before each LLM call, append current state as a user context message:
 - Command mode: serialize current vehicle state (position, armed, flight mode, battery) as JSON
 - Include home position for coordinate reference
 
-**Step 3: Commit**
+**Step 3: Write CTest**
+
+Create `test/AIAgent/test_context_injection.cpp`:
+- `testMissionStateContainsExpectedKeys()` — verify JSON has `items`, `home_position`, `item_count`
+- `testVehicleStateContainsExpectedKeys()` — verify JSON has `lat`, `lon`, `armed`, `battery_percent`, `flight_mode`
+- `testSystemPromptIsNonEmpty()` — verify both mission and command prompts are populated
+- `testVehicleTypePromptVariant()` — verify multicopter vs fixed-wing prompt differs
+
+**Test/Verification:** CTest passes. Prompts populated, context JSON has correct keys.
+
+**Step 4: Commit**
 
 ```bash
-git add src/AIAgent/
+git add src/AIAgent/ test/AIAgent/
 git commit -m "feat: add system prompts and real-time state context injection"
 ```
 
@@ -600,225 +709,12 @@ git commit -m "feat: add system prompts and real-time state context injection"
 
 ## Phase 4 — QML Chat Sidebar UI
 
-### Task 4.1: Create AIAgentSidebar — sliding panel component
+### Task 4.4 [PR 11]: Create AIAgentSlideToAccept — safety confirmation widget
 
-**Objective:** Build the collapsible sidebar that slides in from the left, pushing the main UI content.
-
-**Files:**
-- Create: `src/AIAgent/AIAgentSidebar.qml` (replace stub)
-
-**Step 1: Implement sidebar with toggle button**
-
-Pattern adapted from `PlanViewRightPanel.qml` but anchored left:
-
-```qml
-Item {
-    id: root
-    anchors.top: parent.top
-    anchors.bottom: parent.bottom
-    width: expanded ? ScreenTools.defaultFontPixelWidth * 35 : 0
-
-    property bool expanded: false
-
-    // Semi-transparent background
-    Rectangle {
-        anchors.fill: parent
-        color: qgcPal.window
-        opacity: 0.95
-    }
-
-    // Toggle button (visible on the right edge when collapsed, left edge when expanded)
-    Rectangle {
-        id: toggleButton
-        width: ScreenTools.defaultFontPixelWidth * 2
-        height: ScreenTools.defaultFontPixelHeight * 3
-        anchors.right: expanded ? parent.right : parent.left
-        anchors.rightMargin: expanded ? 0 : -width
-        anchors.verticalCenter: parent.verticalCenter
-        color: qgcPal.button
-        radius: 4
-
-        QGCMouseArea {
-            anchors.fill: parent
-            onClicked: root.expanded = !root.expanded
-        }
-
-        QGCLabel {
-            anchors.centerIn: parent
-            text: expanded ? "◀" : "▶"
-            font.pixelSize: ScreenTools.defaultFontPixelSize
-        }
-    }
-
-    // Chat content when expanded
-    AIAgentChatView {
-        visible: root.expanded
-        anchors.fill: parent
-        anchors.margins: ScreenTools.defaultFontPixelWidth
-    }
-}
-```
-
-**Step 2: Commit**
-
-```bash
-git add src/AIAgent/AIAgentSidebar.qml
-git commit -m "feat: implement AIAgentSidebar sliding panel component"
-```
-
----
-
-### Task 4.2: Create AIAgentChatView — message list and input
-
-**Objective:** Chat interface with scrollable message history, user input field, and mode indicator.
+**Objective:** Implement the slide-to-accept gesture that prevents accidental action approval. This is a standalone component with no backend dependency — good to ship first.
 
 **Files:**
-- Create: `src/AIAgent/AIAgentChatView.qml` (replace stub)
-
-**Step 1: Implement chat view**
-
-```qml
-Item {
-    id: root
-
-    ColumnLayout {
-        anchors.fill: parent
-        spacing: ScreenTools.defaultFontPixelHeight * 0.5
-
-        // Header with mode indicator
-        RowLayout {
-            Layout.fillWidth: true
-            QGCLabel { text: "AI Agent"; font.bold: true }
-            QGCLabel {
-                text: agentController.mode === "mission" ? "✈ Mission" : "⚡ Command"
-                color: qgcPal.text
-            }
-        }
-
-        // Message list
-        ListView {
-            id: messageList
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            model: agentController.chatHistory
-            delegate: ChatMessageDelegate {}
-            clip: true
-            onCountChanged: positionViewAtEnd()
-        }
-
-        // Pending actions area
-        ListView {
-            id: actionsList
-            Layout.fillWidth: true
-            Layout.maximumHeight: contentHeight
-            model: agentController.pendingActions
-            delegate: AIAgentActionCard {}
-            visible: count > 0
-        }
-
-        // User input
-        RowLayout {
-            Layout.fillWidth: true
-            QGCTextField {
-                id: inputField
-                Layout.fillWidth: true
-                placeholderText: "Tell the agent what to do..."
-                onAccepted: {
-                    if (text.trim()) {
-                        agentController.sendMessage(text.trim())
-                        text = ""
-                    }
-                }
-            }
-            QGCButton {
-                text: "Send"
-                onClicked: inputField.accepted()
-            }
-        }
-    }
-}
-```
-
-**Step 2: Commit**
-
-```bash
-git add src/AIAgent/AIAgentChatView.qml
-git commit -m "feat: implement AIAgentChatView with message list and input"
-```
-
----
-
-### Task 4.3: Create AIAgentActionCard — proposed action with approve/reject
-
-**Objective:** Display each proposed action with a description, visual preview on map, and approve/reject controls.
-
-**Files:**
-- Create: `src/AIAgent/AIAgentActionCard.qml` (replace stub)
-
-**Step 1: Implement action card**
-
-```qml
-Rectangle {
-    id: root
-    width: parent.width
-    height: contentColumn.height + ScreenTools.defaultFontPixelHeight
-    color: qgcPal.windowShade
-    radius: 4
-    border.color: qgcPal.text
-    border.width: 1
-
-    required property string actionName
-    required property string actionDescription
-    required property string actionParams
-    required property int actionIndex
-
-    ColumnLayout {
-        id: contentColumn
-        anchors.fill: parent
-        anchors.margins: ScreenTools.defaultFontPixelWidth * 0.5
-        spacing: 2
-
-        QGCLabel {
-            text: actionName
-            font.bold: true
-            font.pixelSize: ScreenTools.defaultFontPixelSize * 0.9
-        }
-        QGCLabel {
-            text: actionDescription
-            font.pixelSize: ScreenTools.defaultFontPixelSize * 0.8
-            wrapMode: Text.WordWrap
-            Layout.fillWidth: true
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignRight
-            QGCButton {
-                text: "✗ Reject"
-                onClicked: agentController.rejectAction(actionIndex)
-            }
-            AIAgentSlideToAccept {
-                onAccepted: agentController.approveAction(actionIndex)
-            }
-        }
-    }
-}
-```
-
-**Step 2: Commit**
-
-```bash
-git add src/AIAgent/AIAgentActionCard.qml
-git commit -m "feat: implement AIAgentActionCard with approve/reject controls"
-```
-
----
-
-### Task 4.4: Create AIAgentSlideToAccept — safety confirmation widget
-
-**Objective:** Implement the slide-to-accept gesture that prevents accidental action approval.
-
-**Files:**
-- Create: `src/AIAgent/AIAgentSlideToAccept.qml` (replace stub)
+- Replace: `src/AIAgent/AIAgentSlideToAccept.qml` (replace stub)
 
 **Step 1: Implement slide-to-accept**
 
@@ -883,6 +779,10 @@ Item {
 }
 ```
 
+**Test/Verification:**
+- `qmllint` passes with no warnings
+- Manual: drag thumb right → `accepted()` fires; release early → snaps back; visual fill progresses with drag
+
 **Step 2: Commit**
 
 ```bash
@@ -892,16 +792,203 @@ git commit -m "feat: implement slide-to-accept safety confirmation widget"
 
 ---
 
-### Task 4.5: Integrate sidebar into MainWindow
+### Task 4.2–4.3 [PR 12]: Create AIAgentChatView + AIAgentActionCard
 
-**Objective:** Add the AIAgentSidebar to `MainWindow.qml` and expose the AgentController to QML.
+**Objective:** Chat interface with scrollable message history, user input field, action approval cards.
 
 **Files:**
+- Replace: `src/AIAgent/AIAgentChatView.qml` (replace stub)
+- Replace: `src/AIAgent/AIAgentActionCard.qml` (replace stub)
+
+**Step 1: Implement AIAgentChatView**
+
+```qml
+Item {
+    id: root
+
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: ScreenTools.defaultFontPixelHeight * 0.5
+
+        // Header with mode indicator
+        RowLayout {
+            Layout.fillWidth: true
+            QGCLabel { text: "AI Agent"; font.bold: true }
+            QGCLabel {
+                text: agentController.mode === "mission" ? "✈ Mission" : "⚡ Command"
+                color: qgcPal.text
+            }
+        }
+
+        // Message list
+        ListView {
+            id: messageList
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            model: agentController.chatHistory
+            delegate: ChatMessageDelegate {}
+            clip: true
+            onCountChanged: positionViewAtEnd()
+        }
+
+        // Pending actions area
+        ListView {
+            id: actionsList
+            Layout.fillWidth: true
+            Layout.maximumHeight: contentHeight
+            model: agentController.pendingActions
+            delegate: AIAgentActionCard {}
+            visible: count > 0
+        }
+
+        // User input
+        RowLayout {
+            Layout.fillWidth: true
+            QGCTextField {
+                id: inputField
+                Layout.fillWidth: true
+                placeholderText: "Tell the agent what to do..."
+                onAccepted: {
+                    if (text.trim()) {
+                        agentController.sendMessage(text.trim())
+                        text = ""
+                    }
+                }
+            }
+            QGCButton {
+                text: "Send"
+                onClicked: inputField.accepted()
+            }
+        }
+    }
+}
+```
+
+**Step 2: Implement AIAgentActionCard**
+
+```qml
+Rectangle {
+    id: root
+    width: parent.width
+    height: contentColumn.height + ScreenTools.defaultFontPixelHeight
+    color: qgcPal.windowShade
+    radius: 4
+    border.color: qgcPal.text
+    border.width: 1
+
+    required property string actionName
+    required property string actionDescription
+    required property string actionParams
+    required property int actionIndex
+
+    ColumnLayout {
+        id: contentColumn
+        anchors.fill: parent
+        anchors.margins: ScreenTools.defaultFontPixelWidth * 0.5
+        spacing: 2
+
+        QGCLabel {
+            text: actionName
+            font.bold: true
+            font.pixelSize: ScreenTools.defaultFontPixelSize * 0.9
+        }
+        QGCLabel {
+            text: actionDescription
+            font.pixelSize: ScreenTools.defaultFontPixelSize * 0.8
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignRight
+            QGCButton {
+                text: "✗ Reject"
+                onClicked: agentController.rejectAction(actionIndex)
+            }
+            AIAgentSlideToAccept {
+                onAccepted: agentController.approveAction(actionIndex)
+            }
+        }
+    }
+}
+```
+
+**Test/Verification:**
+- `qmllint` passes for both files
+- Manual: type message in input → appears in list; staged action shows card with approve/reject; slide-to-approve works
+
+**Step 3: Commit**
+
+```bash
+git add src/AIAgent/AIAgentChatView.qml src/AIAgent/AIAgentActionCard.qml
+git commit -m "feat: implement AIAgentChatView with message list and AIAgentActionCard with approval controls"
+```
+
+---
+
+### Task 4.1+4.5 [PR 13]: AIAgentSidebar + MainWindow integration
+
+**Objective:** Build the collapsible sidebar that slides in from the left, and integrate it into MainWindow with mode switching.
+
+**Files:**
+- Replace: `src/AIAgent/AIAgentSidebar.qml` (replace stub)
 - Modify: `src/AIAgent/CMakeLists.txt` (add C++ source files)
 - Modify: `src/UI/MainWindow.qml`
 - Create: `src/AIAgent/AIAgentQmlGlobal.h` (QML singleton registration)
 
-**Step 1: Register AgentController as QML singleton**
+**Step 1: Implement AIAgentSidebar**
+
+Pattern adapted from `PlanViewRightPanel.qml` but anchored left:
+
+```qml
+Item {
+    id: root
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    width: expanded ? ScreenTools.defaultFontPixelWidth * 35 : 0
+
+    property bool expanded: false
+
+    // Semi-transparent background
+    Rectangle {
+        anchors.fill: parent
+        color: qgcPal.window
+        opacity: 0.95
+    }
+
+    // Toggle button (visible on the right edge when collapsed, left edge when expanded)
+    Rectangle {
+        id: toggleButton
+        width: ScreenTools.defaultFontPixelWidth * 2
+        height: ScreenTools.defaultFontPixelHeight * 3
+        anchors.right: expanded ? parent.right : parent.left
+        anchors.rightMargin: expanded ? 0 : -width
+        anchors.verticalCenter: parent.verticalCenter
+        color: qgcPal.button
+        radius: 4
+
+        QGCMouseArea {
+            anchors.fill: parent
+            onClicked: root.expanded = !root.expanded
+        }
+
+        QGCLabel {
+            anchors.centerIn: parent
+            text: expanded ? "◀" : "▶"
+            font.pixelSize: ScreenTools.defaultFontPixelSize
+        }
+    }
+
+    // Chat content when expanded
+    AIAgentChatView {
+        visible: root.expanded
+        anchors.fill: parent
+        anchors.margins: ScreenTools.defaultFontPixelWidth
+    }
+}
+```
+
+**Step 2: Register AgentController as QML singleton**
 
 Create a QML-accessible singleton similar to `QGroundControlQmlGlobal`:
 
@@ -920,7 +1007,7 @@ private:
 };
 ```
 
-**Step 2: Add sidebar to MainWindow.qml**
+**Step 3: Add sidebar to MainWindow.qml**
 
 In `MainWindow.qml`, add the sidebar as a sibling to FlyView and PlanView:
 
@@ -936,11 +1023,15 @@ AIAgentSidebar {
 
 Also adjust FlyView/PlanView left anchor to respect sidebar width when expanded.
 
-**Step 3: Connect mode switching to view changes**
+**Step 4: Connect mode switching to view changes**
 
 In `showFlyView()` / `showPlanView()` handlers, call `AIAgent.controller.setModeForView()`.
 
-**Step 4: Commit**
+**Test/Verification:**
+- `qmllint` passes for all AIAgent QML files
+- Docker X11 build: toggle button visible, sidebar slides in/out, chat renders, mode indicator switches when changing views
+
+**Step 5: Commit**
 
 ```bash
 git add src/AIAgent/ src/UI/MainWindow.qml
@@ -951,13 +1042,15 @@ git commit -m "feat: integrate AIAgentSidebar into MainWindow with mode switchin
 
 ## Phase 5 — Model Management & Settings
 
-### Task 5.1: Add AI Agent settings panel
+### Task 5.1–5.2 [PR 14]: AI Agent settings panel + model downloader
 
-**Objective:** Create a settings page for model path, GPU layers, context length, and model download.
+**Objective:** Create a settings page for model path, GPU layers, context length, and a one-click Gemma 4 model downloader from HuggingFace.
 
 **Files:**
 - Create: `src/AIAgent/AIAgentSettings.h/.cpp`
 - Create: `src/AIAgent/AIAgentSettingsPanel.qml`
+- Create: `src/AIAgent/ModelDownloader.h/.cpp`
+- Create: `src/AIAgent/ModelDownloadDialog.qml`
 - Modify: `src/AIAgent/CMakeLists.txt`
 
 **Step 1: Define settings FactGroup**
@@ -976,24 +1069,7 @@ Simple form with fields for each setting, a model path browser, and a "Download 
 
 **Step 3: Register in QGC settings menu**
 
-**Step 4: Commit**
-
-```bash
-git add src/AIAgent/
-git commit -m "feat: add AI Agent settings panel with model configuration"
-```
-
----
-
-### Task 5.2: Add Gemma 4 model download helper
-
-**Objective:** Allow users to download Gemma 4 E2B/E4B GGUF models from HuggingFace with one click.
-
-**Files:**
-- Create: `src/AIAgent/ModelDownloader.h/.cpp`
-- Create: `src/AIAgent/ModelDownloadDialog.qml`
-
-**Step 1: Implement ModelDownloader**
+**Step 4: Implement ModelDownloader**
 
 Uses Qt's `QNetworkAccessManager` to download from HuggingFace:
 - `google/gemma-4-E2B-it-GGUF` (Q4_K_M quant, ~1.8GB)
@@ -1001,22 +1077,32 @@ Uses Qt's `QNetworkAccessManager` to download from HuggingFace:
 
 Shows progress bar, validates SHA256 checksum, saves to `~/.local/share/agentGCS/models/`.
 
-**Step 2: Create download dialog QML**
+**Step 5: Create download dialog QML**
 
 Two buttons: "Download Gemma 4 E2B (1.8GB)" and "Download Gemma 4 E4B (3.5GB)" with progress indicators.
 
-**Step 3: Commit**
+**Step 6: Write CTest**
+
+Create `test/AIAgent/test_settings.cpp`:
+- `testSettingsPersistAcrossRestart()` — set modelPath, destroy/recreate settings, verify value retained
+- `testDefaultValues()` — verify defaults (gpuLayers=0, contextLength=4096, etc.)
+- `testModelDownloadProgress()` — test with a small HTTP URL (not HuggingFace), verify progress signal fires
+- `testModelDownloadChecksumValidation()` — verify SHA256 mismatch triggers error
+
+**Test/Verification:** CTest passes. Settings persist. Small-file download shows progress.
+
+**Step 7: Commit**
 
 ```bash
-git add src/AIAgent/
-git commit -m "feat: add Gemma 4 model downloader with HuggingFace integration"
+git add src/AIAgent/ test/AIAgent/
+git commit -m "feat: add AI Agent settings panel, model downloader, and FactGroup settings"
 ```
 
 ---
 
 ## Phase 6 — Polish & Safety
 
-### Task 6.1: Implement action preview on map
+### Task 6.1 [PR 15]: Implement action preview on map
 
 **Objective:** When proposed actions are staged, show visual cues on the QGC map (e.g., new waypoints, takeoff marker, survey polygon).
 
@@ -1037,6 +1123,10 @@ Items appear in a distinct "preview" style (dashed, lighter color) that becomes 
 
 **Step 2: Add overlay to the map view**
 
+**Test/Verification:**
+- `qmllint` passes
+- Manual (Docker X11): stage an add_waypoint action → dashed marker appears on map; approve → marker becomes solid mission item
+
 **Step 3: Commit**
 
 ```bash
@@ -1046,7 +1136,7 @@ git commit -m "feat: add map overlay preview for proposed AI agent actions"
 
 ---
 
-### Task 6.2: Safety validation layer
+### Task 6.2 [PR 15]: Safety validation layer
 
 **Objective:** Before any action is presented to the user for approval, run safety checks and display warnings.
 
@@ -1070,7 +1160,18 @@ Returns a `SafetyResult` with severity (OK / Warning / Block). Blocked actions a
 
 In `stageActionForApproval()`, run safety validation first. If blocked, report to user without staging. If warning, attach warning to the action card.
 
-**Step 3: Commit**
+**Step 3: Write CTest**
+
+Create `test/AIAgent/test_safety_validator.cpp`:
+- `testLowTakeoffAltitude_warns()` — altitude below minimum → Warning
+- `testWaypointOutsideGeofence_blocks()` — outside fence → Block
+- `testRtlAtHome_warns()` — vehicle at home → Warning
+- `testLowBattery_blocks()` — battery < threshold → Block
+- `testValidAction_ok()` — normal action → OK
+
+**Test/Verification:** CTest passes all 5 safety rules.
+
+**Step 4: Commit**
 
 ```bash
 git add src/AIAgent/
@@ -1079,7 +1180,7 @@ git commit -m "feat: add safety validation layer for proposed agent actions"
 
 ---
 
-### Task 6.3: Multimodal input (future-proofing)
+### Task 6.3 [PR 15]: Multimodal input (future-proofing)
 
 **Objective:** Since Gemma 4 is multimodal (any-to-any), prepare the architecture for future video/image input.
 
@@ -1093,6 +1194,8 @@ Add `ChatMessage` support for `content_parts` (type: "image" + data). When an im
 
 **Note:** This is a stub for now — llava integration requires `llama-cpp.h` and the llava extension headers. The infrastructure is in place for when we want to feed QGC video streams or camera captures to the model.
 
+**Test/Verification:** Build compiles. ChatMessage struct accepts image data without crash. No runtime test needed (stub).
+
 **Step 2: Commit**
 
 ```bash
@@ -1102,119 +1205,28 @@ git commit -m "feat: add multimodal input stub for future video/image support"
 
 ---
 
-## Phase 7 — Testing & Documentation
-
-> **Note:** All testing is done inside the Docker container (`./deploy/docker/run-docker-ubuntu.sh`). Build with `just docker` or `make docker`, then run the binary or tests inside the container. See the README Docker section for setup instructions.
-
-### Task 7.1: Write unit tests for tool registry
-
-**Objective:** Verify tool registration, mode/vehicle filtering, and parameter validation.
-
-**Files:**
-- Create: `test/AIAgent/test_agent_tool_registry.cpp`
-- Create: `test/AIAgent/CMakeLists.txt`
-
-**Step 1: Write tests**
-
-```cpp
-void testMissionModeGetsAllTools();
-void testCommandModeGetsOnlyAddTools();
-void testGroundVehicleExcludesLoiterAndSurvey();
-void testVTOLGetsTransitionTool();
-void testToolParameterValidation();
-```
-
-**Step 2: Commit**
-
-```bash
-git add test/AIAgent/
-git commit -m "test: add unit tests for agent tool registry"
-```
-
----
-
-### Task 7.2: Write integration test for ReAct loop
-
-**Objective:** End-to-end test of the agent loop with a mock LLM that returns predetermined tool calls.
-
-**Files:**
-- Create: `test/AIAgent/test_react_loop.cpp`
-
-**Step 1: Create mock LLM**
-
-A `MockLLMEngine` that returns scripted responses:
-1. First call: returns a tool call for `add_waypoint`
-2. After tool result: returns a text summary
-
-**Step 2: Test the full cycle**
-
-```cpp
-void testSingleToolCallAndResponse();
-void testActionApprovalAndExecution();
-void testActionRejection();
-void testSafetyBlock();
-void testModeSwitchingClearsState();
-```
-
-**Step 3: Commit**
-
-```bash
-git add test/AIAgent/
-git commit -m "test: add integration tests for ReAct loop with mock LLM"
-```
-
----
-
-### Task 7.3: Write README for the AIAgent module
-
-**Objective:** Document the module's architecture, configuration, and how to extend it.
-
-**Files:**
-- Create: `src/AIAgent/README.md`
-
-**Step 1: Write the README**
-
-Cover:
-- Architecture overview (LLMEngine → AgentController → ToolRegistry → QGC APIs)
-- How to add a new tool
-- Model setup guide (downloading Gemma 4, configuring GPU layers)
-- Safety model explanation
-- Portability (how to use this module in other QGC forks)
-
-**Step 2: Commit**
-
-```bash
-git add src/AIAgent/README.md
-git commit -m "docs: add AIAgent module README"
-```
-
----
-
-## PR Breakdown Summary
-
-| PR | Phase | Tasks | Description | Est. Size |
-|----|-------|-------|-------------|-----------|
-| 1 | 0 | 0.1–0.2 | Build infrastructure + module skeleton | Small |
-| 2 | 1 | 1.1–1.3 | LLM Engine (load, stream, tool calling) | Large |
-| 3 | 2 | 2.1–2.2 | Tool base + 7 add tools (mission items) | Large |
-| 4 | 2 | 2.3–2.4 | Edit tools + guided action tools | Medium |
-| 5 | 3 | 3.1–3.2 | AgentController + ReAct loop + prompts | Large |
-| 6 | 4 | 4.1–4.5 | Full QML UI (sidebar, chat, actions, slide-to-accept) | Large |
-| 7 | 5 | 5.1–5.2 | Settings + model downloader | Medium |
-| 8 | 6 | 6.1–6.3 | Map preview + safety + multimodal stub | Medium |
-| 9 | 7 | 7.1–7.3 | Tests + documentation | Medium |
-
-**Total: ~9 PRs, 23 tasks**
-
----
-
 ## Key Risks & Mitigations
 
 | Risk | Mitigation |
 |------|------------|
-| llama.cpp build conflicts with QGC's Qt6/CMake | Use `EXCLUDE_FROM_ALL` and only link `llama` static lib; test early in Phase 0 |
+| llama.cpp build conflicts with QGC's Qt6/CMake | Use `EXCLUDE_FROM_ALL` and only link `llama` static lib; test early in PR 1 |
 | Gemma 4 tool calling format not well-supported | llama.cpp has explicit `COMMON_CHAT_FORMAT_PEG_GEMMA4`; fallback: use generic grammar-constrained JSON output |
 | QGC MissionController API not well-documented | Read `MissionController.h` thoroughly; prototype tool calls in a test before full integration |
 | Blocking UI during LLM inference | LLMEngine runs on dedicated QThread; all signals cross thread boundary via Qt::QueuedConnection |
 | Tool execution race conditions | Proposed actions are queued; only one executes at a time; AgentController is single-threaded for state |
 | Model download requires HuggingFace auth | Gemma 4 gated models may need HF token; add token field to settings panel |
+
+---
+
+## Testing & Build
+
+- **All testing uses Docker** — never build natively on host
+- Quick build: `./deploy/docker/run-docker-ubuntu.sh` or `just docker` / `make docker`
+- Docker image: Ubuntu 24.04, Qt 6.10.2, all modules pre-installed
+- Dockerfile: `deploy/docker/Dockerfile-build-ubuntu`
+- Entry point: `deploy/docker/entrypoint.sh` — accepts Release|Debug|RelWithDebInfo|MinSizeRel
+- Run script: `deploy/docker/run-docker-ubuntu.sh` (also has `--fuse` flag for AppImage)
+- Build artifacts land in `./build/`
+- X11 forwarding needed for GUI: `xhost +local:docker` on Linux
+- Apple Silicon: must add `--platform linux/x86_64`
+- Full README with Docker instructions added in `feat/docker-readme-and-plan` branch
