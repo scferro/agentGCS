@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UnitTest.h"
+#include "LLMEngine.h"
 
 /// @brief Tests for LLMEngine streaming completion and token generation.
 ///
@@ -11,7 +12,7 @@ class LLMEngineStreamingTest : public UnitTest
     Q_OBJECT
 
 public:
-    LLMEngineStreamingTest() : UnitTest("LLMEngineStreamingTest", {TestLabel::Unit}) {}
+    LLMEngineStreamingTest() = default;
 
 private slots:
     void initTestCase();

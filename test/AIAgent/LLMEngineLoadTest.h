@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UnitTest.h"
+#include "LLMEngine.h"
 
 /// @brief Tests for LLMEngine model loading and unloading.
 ///
@@ -17,7 +18,7 @@ class LLMEngineLoadTest : public UnitTest
     Q_OBJECT
 
 public:
-    LLMEngineLoadTest() : UnitTest("LLMEngineLoadTest", {TestLabel::Unit}) {}
+    LLMEngineLoadTest() = default;
 
 private slots:
     void _constructionTest();
