@@ -1,0 +1,82 @@
+{
+    "version": 1,
+    "fileType": "FactMetaData",
+    "QGC.MetaData.Facts": [
+        {
+            "name": "modelPath",
+            "shortDesc": "Model path",
+            "longDesc": "Path to the GGUF model file used for AI inference.",
+            "type": "string",
+            "default": "",
+            "label": "Model Path"
+        },
+        {
+            "name": "gpuLayers",
+            "shortDesc": "GPU layers",
+            "longDesc": "Number of model layers to offload to GPU. Set to 0 for CPU-only inference.",
+            "type": "int32",
+            "default": 0,
+            "min": 0,
+            "max": 999,
+            "increment": 1,
+            "decimalPlaces": 0,
+            "label": "GPU Layers"
+        },
+        {
+            "name": "contextLength",
+            "shortDesc": "Context length",
+            "longDesc": "Context window size in tokens. Larger values use more memory.",
+            "type": "int32",
+            "default": 4096,
+            "min": 128,
+            "max": 131072,
+            "increment": 128,
+            "decimalPlaces": 0,
+            "label": "Context Length"
+        },
+        {
+            "name": "threadCount",
+            "shortDesc": "Thread count",
+            "longDesc": "Number of threads for inference. 0 means auto-detect based on CPU cores.",
+            "type": "int32",
+            "default": 0,
+            "min": 0,
+            "max": 256,
+            "increment": 1,
+            "decimalPlaces": 0,
+            "label": "Thread Count"
+        },
+        {
+            "name": "temperature",
+            "shortDesc": "Temperature",
+            "longDesc": "Sampling temperature. Higher values produce more random output. Range: 0.0 to 2.0.",
+            "type": "double",
+            "default": 0.7,
+            "min": 0.0,
+            "max": 2.0,
+            "increment": 0.05,
+            "decimalPlaces": 2,
+            "label": "Temperature"
+        },
+        {
+            "name": "topP",
+            "shortDesc": "Top P",
+            "longDesc": "Top-p (nucleus) sampling threshold. Lower values focus on more likely tokens. Range: 0.0 to 1.0.",
+            "type": "double",
+            "default": 0.9,
+            "min": 0.0,
+            "max": 1.0,
+            "increment": 0.05,
+            "decimalPlaces": 2,
+            "label": "Top P"
+        },
+        {
+            "name": "autoApproveSafe",
+            "shortDesc": "Auto-approve safe actions",
+            "longDesc": "Automatically approve non-flight-critical tool actions without user confirmation. Only enable in trusted environments.",
+            "type": "bool",
+            "default": false,
+            "label": "Auto-approve Safe Actions"
+        }
+    ]
+}

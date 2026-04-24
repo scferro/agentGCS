@@ -43,6 +43,9 @@ class LLMEngine : public QObject {
     Q_PROPERTY(QString modelPath READ modelPath WRITE setModelPath NOTIFY modelPathChanged)
     Q_PROPERTY(int contextLength READ contextLength WRITE setContextLength NOTIFY contextLengthChanged)
     Q_PROPERTY(int gpuLayers READ gpuLayers WRITE setGpuLayers NOTIFY gpuLayersChanged)
+    Q_PROPERTY(int threadCount READ threadCount WRITE setThreadCount NOTIFY threadCountChanged)
+    Q_PROPERTY(double temperature READ temperature WRITE setTemperature NOTIFY temperatureChanged)
+    Q_PROPERTY(double topP READ topP WRITE setTopP NOTIFY topPChanged)
 
 public:
     explicit LLMEngine(QObject* parent = nullptr);
@@ -53,10 +56,16 @@ public:
     QString modelPath() const { return m_modelPath; }
     int contextLength() const { return m_contextLength; }
     int gpuLayers() const { return m_gpuLayers; }
+    int threadCount() const { return m_threadCount; }
+    double temperature() const { return m_temperature; }
+    double topP() const { return m_topP; }
 
     void setModelPath(const QString& path);
     void setContextLength(int n);
     void setGpuLayers(int n);
+    void setThreadCount(int n);
+    void setTemperature(double t);
+    void setTopP(double p);
 
     /// Load the GGUF model from modelPath(). Creates the llama context and
     /// initializes chat templates for Gemma 4 tool-calling support.
@@ -90,6 +99,9 @@ signals:
     void modelPathChanged();
     void contextLengthChanged();
     void gpuLayersChanged();
+    void threadCountChanged();
+    void temperatureChanged();
+    void topPChanged();
     void loadFailed(const QString& error);
 
     /// Emitted for each generated token (streaming to UI).
@@ -115,6 +127,9 @@ private:
     QString m_modelPath;
     int m_contextLength = 4096;
     int m_gpuLayers = 0;
+    int m_threadCount = 0;      // 0 = auto-detect
+    double m_temperature = 0.7;
+    double m_topP = 0.9;
 
     // Registered tools for tool-calling support
     QList<AgentTool> m_tools;

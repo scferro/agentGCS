@@ -1,0 +1,46 @@
+{
+    "version": 1,
+    "fileType": "SettingsUI",
+    "bindings": {
+        "_aiSettings": "QGroundControl.settingsManager.aiSettings"
+    },
+    "groups": [
+        {
+            "heading": "AI Agent",
+            "keywords": ["ai", "llm", "model", "gguf", "inference", "agent", "tool calling"],
+            "controls": [
+                {
+                    "setting": "aiSettings.modelPath",
+                    "control": "browse",
+                    "showWhen": "!ScreenTools.isMobile"
+                },
+                {
+                    "setting": "aiSettings.gpuLayers"
+                },
+                {
+                    "setting": "aiSettings.contextLength"
+                },
+                {
+                    "setting": "aiSettings.threadCount"
+                },
+                {
+                    "setting": "aiSettings.temperature",
+                    "control": "slider",
+                    "min": 0.0,
+                    "max": 2.0,
+                    "step": 0.1
+                },
+                {
+                    "setting": "aiSettings.topP",
+                    "control": "slider",
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.05
+                },
+                {
+                    "setting": "aiSettings.autoApproveSafe"
+                }
+            ]
+        }
+    ]
+}

@@ -31,6 +31,13 @@
             "divider": true
         },
         {
+            "name": "AI Agent",
+            "qml": "AISettings.qml",
+            "icon": "qrc:/InstrumentValueIcons/brain.svg",
+            "visible": "QGroundControl.settingsManager && QGroundControl.settingsManager.aiSettings !== undefined",
+            "pageDefinition": "AI.SettingsUI.json"
+        },
+        {
             "name": "ADSB Server",
             "qml": "ADSBServerSettings.qml",
             "icon": "qrc:/InstrumentValueIcons/airplane.svg",

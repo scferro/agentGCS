@@ -50,6 +50,29 @@ void LLMEngine::setGpuLayers(int n)
     emit gpuLayersChanged();
 }
 
+void LLMEngine::setThreadCount(int n)
+{
+    if (m_threadCount == n) return;
+    m_threadCount = n;
+    emit threadCountChanged();
+}
+
+void LLMEngine::setTemperature(double t)
+{
+    if (qFuzzyCompare(m_temperature, t)) return;
+    m_temperature = t;
+    resetSampler();
+    emit temperatureChanged();
+}
+
+void LLMEngine::setTopP(double p)
+{
+    if (qFuzzyCompare(m_topP, p)) return;
+    m_topP = p;
+    resetSampler();
+    emit topPChanged();
+}
+
 // ---------------------------------------------------------------------------
 // Model loading / unloading
 // ---------------------------------------------------------------------------
@@ -91,6 +114,7 @@ bool LLMEngine::loadModel()
     ctxParams.n_ubatch = 128;
     ctxParams.n_seq_max = 1;
     ctxParams.offload_kqv = true;
+    ctxParams.n_threads = m_threadCount > 0 ? m_threadCount : 0;
 
     m_ctx = llama_init_from_model(m_model, ctxParams);
     if (!m_ctx) {
@@ -176,8 +200,8 @@ void LLMEngine::resetSampler()
 
     // Default sampling chain for chat: top-k → top-p → temp → dist
     llama_sampler_chain_add(m_sampler, llama_sampler_init_top_k(50));
-    llama_sampler_chain_add(m_sampler, llama_sampler_init_top_p(0.95f, 1));
-    llama_sampler_chain_add(m_sampler, llama_sampler_init_temp(0.6f));
+    llama_sampler_chain_add(m_sampler, llama_sampler_init_top_p(static_cast<float>(m_topP), 1));
+    llama_sampler_chain_add(m_sampler, llama_sampler_init_temp(static_cast<float>(m_temperature)));
     llama_sampler_chain_add(m_sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
 }
 

@@ -16,6 +16,10 @@ target_sources(AIAgentModule
     PRIVATE
         LLMEngine.h
         LLMEngine.cpp
+        ModelManager.h
+        ModelManager.cpp
+        ModelDownloader.h
+        ModelDownloader.cpp
 )
 
 target_include_directories(AIAgentModule PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -33,6 +37,7 @@ target_link_libraries(AIAgentModule
         Qt6::Core
         Qt6::Qml
         Qt6::Quick
+        Qt6::Network
         llama
         llama-common
         nlohmann_json::nlohmann_json
