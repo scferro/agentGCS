@@ -1,0 +1,11 @@
+#include "AISettings.h"
+
+DECLARE_SETTINGGROUP(AI, "AI")
+
+DECLARE_SETTINGSFACT(AISettings, modelPath)
+DECLARE_SETTINGSFACT(AISettings, gpuLayers)
+DECLARE_SETTINGSFACT(AISettings, contextLength)
+DECLARE_SETTINGSFACT(AISettings, threadCount)
+DECLARE_SETTINGSFACT(AISettings, temperature)
+DECLARE_SETTINGSFACT(AISettings, topP)
+DECLARE_SETTINGSFACT(AISettings, autoApproveSafe)

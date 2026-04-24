@@ -344,3 +344,11 @@ add_qgc_test(RequestMetaDataTypeStateMachineTest LABELS Integration Vehicle RESO
 add_qgc_test(SendMavCommandWithHandlerTest LABELS Integration Vehicle RESOURCE_LOCK MockLink)
 add_qgc_test(SendMavCommandWithSignallingTest LABELS Integration Vehicle RESOURCE_LOCK MockLink)
 add_qgc_test(VehicleLinkManagerTest LABELS Integration Vehicle RESOURCE_LOCK MockLink)
+
+# ----------------------------------------------------------------------------
+# AIAgent
+# ----------------------------------------------------------------------------
+add_subdirectory(AIAgent)
+add_qgc_test(LLMEngineLoadTest LABELS Unit)
+add_qgc_test(LLMEngineStreamingTest LABELS Unit Slow)
+add_qgc_test(LLMEngineToolCallTest LABELS Unit Slow)
