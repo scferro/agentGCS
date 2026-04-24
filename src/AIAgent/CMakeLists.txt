@@ -12,7 +12,21 @@ qt_add_qml_module(AIAgentModule
     NO_PLUGIN
 )
 
+target_sources(AIAgentModule
+    PRIVATE
+        LLMEngine.h
+        LLMEngine.cpp
+)
+
 target_include_directories(AIAgentModule PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+# llama.cpp include directories (model loading, context, chat templates)
+target_include_directories(AIAgentModule
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/extern/llama.cpp/include
+        ${CMAKE_SOURCE_DIR}/extern/llama.cpp/common
+        ${CMAKE_SOURCE_DIR}/extern/llama.cpp/ggml/include
+)
 
 target_link_libraries(AIAgentModule
     PRIVATE
