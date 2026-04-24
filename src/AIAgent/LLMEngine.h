@@ -10,6 +10,7 @@ struct llama_model;
 struct llama_context;
 struct llama_sampler;
 struct common_chat_templates;
+#include "chat.h" // for common_chat_params (needed by m_lastChatParams member)
 
 /// @brief Data structure for chat messages passed to/from the LLM.
 struct ChatMessage {
@@ -17,6 +18,13 @@ struct ChatMessage {
     QString content;   ///< Message text content
     QString toolName;   ///< Tool name (for role="tool" or assistant tool-call)
     QString toolCallId; ///< Tool call ID (for role="tool" response)
+};
+
+/// @brief Describes a tool that the LLM can invoke via tool-calling.
+struct AgentTool {
+    QString name;           ///< Tool function name (e.g. "add_waypoint")
+    QString description;    ///< Human-readable description of what the tool does
+    QString parametersJson; ///< JSON schema string for tool parameters (OpenAI-compatible)
 };
 
 /// @brief Qt wrapper around llama.cpp for local LLM inference with streaming.
@@ -57,6 +65,14 @@ public:
 
     /// Unload the current model and free all llama.cpp resources.
     Q_INVOKABLE void unloadModel();
+
+    /// Register tools that the LLM can invoke during completion.
+    /// Tools are passed to the chat template so the model knows what's available.
+    /// Call before startCompletion(). Replaces any previously registered tools.
+    Q_INVOKABLE void setTools(const QList<AgentTool>& tools);
+
+    /// Remove all registered tools.
+    Q_INVOKABLE void clearTools();
 
     /// Start a completion cycle with the given message history.
     /// Runs the decode/sample loop on the engine's thread, emitting
@@ -100,14 +116,21 @@ private:
     int m_contextLength = 4096;
     int m_gpuLayers = 0;
 
+    // Registered tools for tool-calling support
+    QList<AgentTool> m_tools;
+
     // Owned llama.cpp objects (raw pointers — freed in destructor/unloadModel)
     llama_model* m_model = nullptr;
     llama_context* m_ctx = nullptr;
     llama_sampler* m_sampler = nullptr;
     common_chat_templates* m_chatTemplates = nullptr;
 
+    // Chat format from the last template application (used for parsing tool calls)
+    common_chat_params m_lastChatParams;
+
     // Cancellation flag — atomic for thread-safe signaling
     std::atomic<bool> m_cancelled{false};
 };
 
 Q_DECLARE_METATYPE(ChatMessage)
+Q_DECLARE_METATYPE(AgentTool)

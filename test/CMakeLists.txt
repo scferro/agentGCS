@@ -351,3 +351,4 @@ add_qgc_test(VehicleLinkManagerTest LABELS Integration Vehicle RESOURCE_LOCK Moc
 add_subdirectory(AIAgent)
 add_qgc_test(LLMEngineLoadTest LABELS Unit)
 add_qgc_test(LLMEngineStreamingTest LABELS Unit Slow)
+add_qgc_test(LLMEngineToolCallTest LABELS Unit Slow)

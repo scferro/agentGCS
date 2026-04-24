@@ -12,9 +12,11 @@
 LLMEngine::LLMEngine(QObject* parent)
     : QObject(parent)
 {
-    // Register ChatMessage for queuedsignal connections across threads
+    // Register metatypes for queued signal connections across threads
     static const int chatMessageTypeId = qRegisterMetaType<ChatMessage>("ChatMessage");
+    static const int agentToolTypeId   = qRegisterMetaType<AgentTool>("AgentTool");
     Q_UNUSED(chatMessageTypeId);
+    Q_UNUSED(agentToolTypeId);
 }
 
 LLMEngine::~LLMEngine()
@@ -144,6 +146,20 @@ void LLMEngine::unloadModel()
 }
 
 // ---------------------------------------------------------------------------
+// Tool registration
+// ---------------------------------------------------------------------------
+
+void LLMEngine::setTools(const QList<AgentTool>& tools)
+{
+    m_tools = tools;
+}
+
+void LLMEngine::clearTools()
+{
+    m_tools.clear();
+}
+
+// ---------------------------------------------------------------------------
 // Sampler management
 // ---------------------------------------------------------------------------
 
@@ -222,16 +238,33 @@ void LLMEngine::runCompletion(const QList<ChatMessage>& messages)
         chatMsgs.push_back(std::move(cm));
     }
 
-    // --- 2. Apply chat template to get the formatted prompt ---
+    // --- 2. Build tool list from registered AgentTool definitions ---
+    std::vector<common_chat_tool> chatTools;
+    chatTools.reserve(m_tools.size());
+
+    for (const auto& tool : m_tools) {
+        common_chat_tool ct;
+        ct.name = tool.name.toStdString();
+        ct.description = tool.description.toStdString();
+        ct.parameters = tool.parametersJson.toStdString();
+        chatTools.push_back(std::move(ct));
+    }
+
+    // --- 3. Apply chat template to get the formatted prompt ---
     std::string formattedPrompt;
 
     if (m_chatTemplates) {
         common_chat_templates_inputs inputs;
         inputs.messages = chatMsgs;
         inputs.add_generation_prompt = true;
+        inputs.tools = chatTools;
+        inputs.tool_choice = chatTools.empty()
+            ? COMMON_CHAT_TOOL_CHOICE_NONE
+            : COMMON_CHAT_TOOL_CHOICE_AUTO;
+        inputs.enable_thinking = false; // Disable thinking channel for tool-calling clarity
 
-        auto chatParams = common_chat_templates_apply(m_chatTemplates, inputs);
-        formattedPrompt = chatParams.prompt;
+        m_lastChatParams = common_chat_templates_apply(m_chatTemplates, inputs);
+        formattedPrompt = m_lastChatParams.prompt;
     } else {
         // Fallback: concatenate messages as plain text (no template)
         for (const auto& cm : chatMsgs) {
@@ -240,7 +273,7 @@ void LLMEngine::runCompletion(const QList<ChatMessage>& messages)
         formattedPrompt += "assistant: ";
     }
 
-    // --- 3. Tokenize the prompt ---
+    // --- 4. Tokenize the prompt ---
     const auto* vocab = llama_model_get_vocab(m_model);
     const bool addBos = llama_vocab_get_add_bos(vocab);
 
@@ -255,17 +288,27 @@ void LLMEngine::runCompletion(const QList<ChatMessage>& messages)
         return;
     }
 
-    // --- 4. Create batch for the full prompt ---
+    // --- 5. Create batch for the full prompt ---
     auto batch = llama_batch_get_one(promptTokens.data(), static_cast<int32_t>(promptTokens.size()));
 
-    // --- 5. Decode the prompt (prefill) ---
+    // --- 6. Decode the prompt (prefill) ---
     if (llama_decode(m_ctx, batch) != 0) {
         emit loadFailed(QStringLiteral("Failed to decode prompt batch"));
         setIsGenerating(false);
         return;
     }
 
-    // --- 6. Generate tokens in a loop ---
+    // --- 7. Collect additional stop tokens from the chat template ---
+    std::vector<llama_token> additionalStopTokens;
+    if (m_chatTemplates) {
+        for (const auto& stopStr : m_lastChatParams.additional_stops) {
+            const auto stopTokens = common_tokenize(vocab, stopStr, false, false);
+            additionalStopTokens.insert(additionalStopTokens.end(),
+                                         stopTokens.begin(), stopTokens.end());
+        }
+    }
+
+    // --- 8. Generate tokens in a loop ---
     QString generatedText;
     int nGenerated = 0;
     const int maxTokens = nCtx - static_cast<int32_t>(promptTokens.size());
@@ -280,10 +323,20 @@ void LLMEngine::runCompletion(const QList<ChatMessage>& messages)
         // Sample the next token
         llama_token newToken = llama_sampler_sample(m_sampler, m_ctx, -1);
 
-        // Check for end-of-generation
+        // Check for end-of-generation (vocab-level EOS tokens)
         if (llama_vocab_is_eog(vocab, newToken)) {
             break;
         }
+
+        // Check for additional stop tokens from chat template
+        bool isStopToken = false;
+        for (const auto& stopTok : additionalStopTokens) {
+            if (newToken == stopTok) {
+                isStopToken = true;
+                break;
+            }
+        }
+        if (isStopToken) break;
 
         // Convert token to text
         const std::string tokenStr = common_token_to_piece(m_ctx, newToken, false);
@@ -306,39 +359,36 @@ void LLMEngine::runCompletion(const QList<ChatMessage>& messages)
         nGenerated++;
     }
 
-    // --- 7. Parse the generated text for tool calls (if chat template supports it) ---
+    // --- 9. Parse the generated text for tool calls ---
+    bool hadToolCalls = false;
+
     if (m_chatTemplates && !generatedText.isEmpty()) {
-        common_chat_params chatParams;
-        if (m_chatTemplates) {
-            common_chat_templates_inputs dummyInputs;
-            dummyInputs.add_generation_prompt = false;
-            chatParams = common_chat_templates_apply(m_chatTemplates, dummyInputs);
+        common_chat_parser_params parserParams(m_lastChatParams);
+        parserParams.parse_tool_calls = true;
+        if (!m_lastChatParams.parser.empty()) {
+            parserParams.parser.load(m_lastChatParams.parser);
         }
 
-        common_chat_parser_params parserParams(chatParams);
-        parserParams.parse_tool_calls = true;
-
-        // Parse the full generated text for tool calls
-        const common_chat_msg parsed = common_chat_parse(generatedText.toStdString(), false, parserParams);
+        const common_chat_msg parsed = common_chat_parse(
+            generatedText.toStdString(), false, parserParams);
 
         if (!parsed.tool_calls.empty()) {
-            // Emit tool call signals
+            hadToolCalls = true;
             for (const auto& tc : parsed.tool_calls) {
+                qDebug() << "LLMEngine: Tool call detected:" << QString::fromStdString(tc.name)
+                         << "args:" << QString::fromStdString(tc.arguments);
                 emit toolCallDetected(
                     QString::fromStdString(tc.name),
                     QString::fromStdString(tc.arguments)
                 );
             }
-            // Reset sampler for next turn
-            llama_sampler_reset(m_sampler);
-            setIsGenerating(false);
-            emit generationComplete(generatedText);
-            return;
         }
     }
 
-    // --- 8. Done ---
+    // --- 10. Done ---
     llama_sampler_reset(m_sampler);
     setIsGenerating(false);
     emit generationComplete(generatedText);
+
+    Q_UNUSED(hadToolCalls);
 }
