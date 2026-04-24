@@ -22,9 +22,9 @@
 | 2 | 0 | 0.2 | Create AIAgent module skeleton | Build `AIAgentModule` target | Small | ✅ Done |
 | 3 | 1 | 1.1 | LLMEngine model loading + unloading | CTest: load a GGUF model | Small | ✅ Done |
 | 4 | 1 | 1.2 | LLMEngine streaming completion | CTest: token signals fire | Small | ✅ Done |
-| 5 | 1 | 1.3 | LLMEngine tool calling support | CTest: tool call parsed + emitted | Small | 🔄 Next |
-| 6 | 5→1.5 | 5.1–5.2 | **Settings panel + model downloader** | Persist test + small download | Medium | 📋 Queued |
-| 7 | 2 | 2.1 | AgentToolBase + Registry | CTest: filtering logic | Small | 📋 Queued |
+|| 5 | 1 | 1.3 | LLMEngine tool calling support | CTest: tool call parsed + emitted | Small | ✅ Done ||
+6 | 5→1.5 | 5.1–5.2 | **Settings panel + model downloader** | Persist test + small download | Medium | ✅ Done ||
+7 | 2 | 2.1 | AgentToolBase + Registry | CTest: filtering logic | Small | 🔄 Next ||
 | 8 | 2 | 2.2 | 7 mission "add" tools | CTest: schema + availability | Medium | 📋 Queued |
 | 9 | 2 | 2.3–2.4 | 4 edit tools + 5 guided tools | CTest: schema + availability | Medium | 📋 Queued |
 | 10 | 3 | 3.1 | AgentController with ReAct loop | CTest: mock LLM cycle | Medium | 📋 Queued |

@@ -102,3 +102,18 @@ target_include_directories(test_tool_call
         ${CMAKE_SOURCE_DIR}/extern/llama.cpp/common
         ${CMAKE_SOURCE_DIR}/extern/llama.cpp/ggml/include
 )
+
+# test_agent_tool_registry: Tool registry filtering tests (no model, no LLM)
+add_executable(test_agent_tool_registry
+    test_agent_tool_registry.cpp
+)
+target_link_libraries(test_agent_tool_registry
+    PRIVATE
+        AIAgentModule
+        Qt6::Core
+        nlohmann_json::nlohmann_json
+)
+target_include_directories(test_agent_tool_registry
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/AIAgent
+)

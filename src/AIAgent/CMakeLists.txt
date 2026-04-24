@@ -20,6 +20,10 @@ target_sources(AIAgentModule
         ModelManager.cpp
         ModelDownloader.h
         ModelDownloader.cpp
+        AgentToolBase.h
+        AgentToolBase.cpp
+        AgentToolRegistry.h
+        AgentToolRegistry.cpp
 )
 
 target_include_directories(AIAgentModule PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
