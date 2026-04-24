@@ -14,25 +14,32 @@
 
 **Principle:** Every PR does ONE thing and has a clear test/verification. More small PRs are better than fewer large ones.
 
-| PR | Phase | Tasks | Scope | Test Method | Est. Size |
-|----|-------|-------|-------|-------------|-----------|
-| 1 | 0 | 0.1 | Add llama.cpp as CMake subproject | Build `llama` target in Docker | Tiny |
-| 2 | 0 | 0.2 | Create AIAgent module skeleton | Build `AIAgentModule` target | Small |
-| 3 | 1 | 1.1 | LLMEngine model loading + unloading | CTest: load a GGUF model | Small |
-| 4 | 1 | 1.2 | LLMEngine streaming completion | CTest: token signals fire | Small |
-| 5 | 1 | 1.3 | LLMEngine tool calling support | CTest: tool call parsed + emitted | Small |
-| 6 | 2 | 2.1 | AgentToolBase + Registry | CTest: filtering logic | Small |
-| 7 | 2 | 2.2 | 7 mission "add" tools | CTest: schema + availability | Medium |
-| 8 | 2 | 2.3–2.4 | 4 edit tools + 5 guided tools | CTest: schema + availability | Medium |
-| 9 | 3 | 3.1 | AgentController with ReAct loop | CTest: mock LLM cycle | Medium |
-| 10 | 3 | 3.2 | System prompts + context injection | CTest: expected key presence | Small |
-| 11 | 4 | 4.4 | SlideToAccept widget | qmllint + manual drag test | Tiny |
-| 12 | 4 | 4.2–4.3 | ChatView + ActionCard | qmllint + manual | Small |
-| 13 | 4 | 4.1+4.5 | Sidebar + MainWindow integration | qmllint + X11 visual | Small |
-| 14 | 5 | 5.1–5.2 | Settings panel + model downloader | Persist test + small download | Medium |
-| 15 | 6 | 6.1–6.3 | Safety validator + map overlay + multimodal stub | CTest safety + manual map | Medium |
+**Reorder rationale (Apr 24):** Model management was PR 14 (Phase 5) in the original plan — too late. Without settings/model downloader, there's no way for a user to actually *use* the AI agent in QGC. Moved it to PR 6 so that by the time we build the UI (PR 12+), the backend is fully functional end-to-end.
+
+| PR | Phase | Tasks | Scope | Test Method | Est. Size | Status |
+|----|-------|-------|-------|-------------|-----------|--------|
+| 1 | 0 | 0.1 | Add llama.cpp as CMake subproject | Build `llama` target in Docker | Tiny | ✅ Done |
+| 2 | 0 | 0.2 | Create AIAgent module skeleton | Build `AIAgentModule` target | Small | ✅ Done |
+| 3 | 1 | 1.1 | LLMEngine model loading + unloading | CTest: load a GGUF model | Small | ✅ Done |
+| 4 | 1 | 1.2 | LLMEngine streaming completion | CTest: token signals fire | Small | ✅ Done |
+| 5 | 1 | 1.3 | LLMEngine tool calling support | CTest: tool call parsed + emitted | Small | 🔄 Next |
+| 6 | 5→1.5 | 5.1–5.2 | **Settings panel + model downloader** | Persist test + small download | Medium | 📋 Queued |
+| 7 | 2 | 2.1 | AgentToolBase + Registry | CTest: filtering logic | Small | 📋 Queued |
+| 8 | 2 | 2.2 | 7 mission "add" tools | CTest: schema + availability | Medium | 📋 Queued |
+| 9 | 2 | 2.3–2.4 | 4 edit tools + 5 guided tools | CTest: schema + availability | Medium | 📋 Queued |
+| 10 | 3 | 3.1 | AgentController with ReAct loop | CTest: mock LLM cycle | Medium | 📋 Queued |
+| 11 | 3 | 3.2 | System prompts + context injection | CTest: expected key presence | Small | 📋 Queued |
+| 12 | 4 | 4.4 + 4.2–4.3 | ChatView + ActionCard + SlideToAccept | qmllint + manual | Small | 📋 Queued |
+| 13 | 4 | 4.1+4.5 | Sidebar + MainWindow integration | qmllint + X11 visual | Small | 📋 Queued |
+| 14 | 6 | 6.1–6.2 | Safety validator + map overlay | CTest safety + manual map | Medium | 📋 Queued |
+| 15 | 6 | 6.3 | Multimodal input stub | Build compiles | Tiny | 📋 Queued |
 
 **Total: 15 PRs, 23 tasks**
+
+### Test Models
+
+- **Gemma 4 E2B-Instruct Q4_K_M** — Production model (2.88 GiB). Located at `models/gemma-4-E2B-it-Q4_K_M.gguf`. Full tool-calling support via Gemma 4 chat template. ~4.1 GiB RAM at n_ctx=2048 (CPU-only).
+- **SmolLM2-135M-Instruct Q4_K_M** — CI/test model (101 MiB). Located at `models/SmolLM2-135M-Instruct-Q4_K_M.gguf`. Fast load, ~25 MiB compute buffer at n_ctx=2048. No tool calling (use for load/generation tests only).
 
 ---
 
