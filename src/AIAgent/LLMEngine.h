@@ -3,20 +3,31 @@
 #include <QtCore/QObject>
 #include <QtCore/QString>
 #include <QtCore/QThread>
+#include <QtCore/QMutex>
+#include <atomic>
 
 struct llama_model;
 struct llama_context;
 struct llama_sampler;
 struct common_chat_templates;
 
-/// @brief Qt wrapper around llama.cpp model loading, context, and chat templates.
+/// @brief Data structure for chat messages passed to/from the LLM.
+struct ChatMessage {
+    QString role;       ///< "system", "user", "assistant", "tool"
+    QString content;   ///< Message text content
+    QString toolName;   ///< Tool name (for role="tool" or assistant tool-call)
+    QString toolCallId; ///< Tool call ID (for role="tool" response)
+};
+
+/// @brief Qt wrapper around llama.cpp for local LLM inference with streaming.
 ///
-/// LLMEngine manages the lifecycle of a llama.cpp model and its inference context.
-/// It exposes load/unload operations as Q_INVOKABLE methods and emits Qt signals
-/// for state changes and errors.
+/// LLMEngine manages the lifecycle of a llama.cpp model, context, sampler chain,
+/// and chat templates. It exposes load/unload and completion operations as
+/// Q_INVOKABLE methods and emits Qt signals for state changes, streaming tokens,
+/// and tool call detection.
 ///
-/// The engine is designed to be moved to a background QThread for non-blocking
-/// inference (completion loop added in PR 4).
+/// The inference loop runs on a background QThread to avoid blocking the UI.
+/// Call moveToThread() with a long-lived QThread before calling startCompletion().
 class LLMEngine : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool isLoaded READ isLoaded NOTIFY isLoadedChanged)
@@ -47,6 +58,16 @@ public:
     /// Unload the current model and free all llama.cpp resources.
     Q_INVOKABLE void unloadModel();
 
+    /// Start a completion cycle with the given message history.
+    /// Runs the decode/sample loop on the engine's thread, emitting
+    /// tokenGenerated for each token and generationComplete when done.
+    /// If a tool call is detected, emits toolCallDetected and stops.
+    Q_INVOKABLE void startCompletion(const QList<ChatMessage>& messages);
+
+    /// Cancel an in-progress completion.
+    /// Thread-safe: can be called from any thread.
+    Q_INVOKABLE void cancelCompletion();
+
 signals:
     void isLoadedChanged();
     void isGeneratingChanged();
@@ -55,12 +76,24 @@ signals:
     void gpuLayersChanged();
     void loadFailed(const QString& error);
 
-    // Added in PR 4 (streaming completion):
-    // void tokenGenerated(const QString& token);
-    // void generationComplete(const QString& fullText);
-    // void toolCallDetected(const QString& toolName, const QString& arguments);
+    /// Emitted for each generated token (streaming to UI).
+    void tokenGenerated(const QString& token);
+
+    /// Emitted when the full generation is complete.
+    void generationComplete(const QString& fullText);
+
+    /// Emitted when a tool call is detected in the model output.
+    void toolCallDetected(const QString& toolName, const QString& arguments);
 
 private:
+    /// Internal: runs the decode/sample loop. Called on the engine's thread.
+    void runCompletion(const QList<ChatMessage>& messages);
+
+    /// Internal: reset the sampler chain. Call only on engine's thread.
+    void resetSampler();
+
+    void setIsGenerating(bool generating);
+
     bool m_isLoaded = false;
     bool m_isGenerating = false;
     QString m_modelPath;
@@ -70,5 +103,11 @@ private:
     // Owned llama.cpp objects (raw pointers — freed in destructor/unloadModel)
     llama_model* m_model = nullptr;
     llama_context* m_ctx = nullptr;
+    llama_sampler* m_sampler = nullptr;
     common_chat_templates* m_chatTemplates = nullptr;
+
+    // Cancellation flag — atomic for thread-safe signaling
+    std::atomic<bool> m_cancelled{false};
 };
+
+Q_DECLARE_METATYPE(ChatMessage)
