@@ -172,6 +172,19 @@ if(WIN32 AND NOT TARGET Vulkan::Headers)
 endif()
 
 # ============================================================================
+# nlohmann/json (header-only JSON library for AI Agent module)
+# ============================================================================
+CPMAddPackage(
+    NAME nlohmann_json
+    GITHUB_REPOSITORY nlohmann/json
+    GIT_TAG v3.12.0
+    SYSTEM YES
+    OPTIONS
+        "JSON_BuildTests OFF"
+        "JSON_Install OFF"
+)
+
+# ============================================================================
 # Qt6 Configuration
 # ============================================================================
 
@@ -327,6 +340,21 @@ qt_add_qml_module(${CMAKE_PROJECT_NAME}
         QtQuick.Dialogs
         QtQuick.Layouts
 )
+
+# ----------------------------------------------------------------------------
+# llama.cpp (local LLM inference for AI Agent)
+# ----------------------------------------------------------------------------
+# Built as a static library from the git submodule at extern/llama.cpp.
+# To initialize: git submodule update --init --recursive
+set(LLAMA_STANDALONE OFF CACHE BOOL "llama.cpp: disable standalone build" FORCE)
+set(LLAMA_BUILD_COMMON ON CACHE BOOL "llama.cpp: build common utils (chat templates, tool calling)" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "llama.cpp: disable tests" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "llama.cpp: disable examples" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "llama.cpp: disable server" FORCE)
+set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "llama.cpp: disable tools" FORCE)
+set(LLAMA_CURL ON CACHE BOOL "llama.cpp: enable curl for model downloads" FORCE)
+set(GGML_OPENMP OFF CACHE BOOL "ggml: disable OpenMP (conflicts with Qt)" FORCE)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/extern/llama.cpp llama.cpp EXCLUDE_FROM_ALL)
 
 # ----------------------------------------------------------------------------
 # Source & Test Subdirectories

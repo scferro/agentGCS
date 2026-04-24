@@ -1,0 +1,113 @@
+#pragma once
+
+#include <QtCore/QObject>
+#include <QtCore/QString>
+#include <QtCore/QThread>
+#include <QtCore/QMutex>
+#include <atomic>
+
+struct llama_model;
+struct llama_context;
+struct llama_sampler;
+struct common_chat_templates;
+
+/// @brief Data structure for chat messages passed to/from the LLM.
+struct ChatMessage {
+    QString role;       ///< "system", "user", "assistant", "tool"
+    QString content;   ///< Message text content
+    QString toolName;   ///< Tool name (for role="tool" or assistant tool-call)
+    QString toolCallId; ///< Tool call ID (for role="tool" response)
+};
+
+/// @brief Qt wrapper around llama.cpp for local LLM inference with streaming.
+///
+/// LLMEngine manages the lifecycle of a llama.cpp model, context, sampler chain,
+/// and chat templates. It exposes load/unload and completion operations as
+/// Q_INVOKABLE methods and emits Qt signals for state changes, streaming tokens,
+/// and tool call detection.
+///
+/// The inference loop runs on a background QThread to avoid blocking the UI.
+/// Call moveToThread() with a long-lived QThread before calling startCompletion().
+class LLMEngine : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(bool isLoaded READ isLoaded NOTIFY isLoadedChanged)
+    Q_PROPERTY(bool isGenerating READ isGenerating NOTIFY isGeneratingChanged)
+    Q_PROPERTY(QString modelPath READ modelPath WRITE setModelPath NOTIFY modelPathChanged)
+    Q_PROPERTY(int contextLength READ contextLength WRITE setContextLength NOTIFY contextLengthChanged)
+    Q_PROPERTY(int gpuLayers READ gpuLayers WRITE setGpuLayers NOTIFY gpuLayersChanged)
+
+public:
+    explicit LLMEngine(QObject* parent = nullptr);
+    ~LLMEngine();
+
+    bool isLoaded() const { return m_isLoaded; }
+    bool isGenerating() const { return m_isGenerating; }
+    QString modelPath() const { return m_modelPath; }
+    int contextLength() const { return m_contextLength; }
+    int gpuLayers() const { return m_gpuLayers; }
+
+    void setModelPath(const QString& path);
+    void setContextLength(int n);
+    void setGpuLayers(int n);
+
+    /// Load the GGUF model from modelPath(). Creates the llama context and
+    /// initializes chat templates for Gemma 4 tool-calling support.
+    /// Returns true on success, false on failure (emits loadFailed).
+    Q_INVOKABLE bool loadModel();
+
+    /// Unload the current model and free all llama.cpp resources.
+    Q_INVOKABLE void unloadModel();
+
+    /// Start a completion cycle with the given message history.
+    /// Runs the decode/sample loop on the engine's thread, emitting
+    /// tokenGenerated for each token and generationComplete when done.
+    /// If a tool call is detected, emits toolCallDetected and stops.
+    Q_INVOKABLE void startCompletion(const QList<ChatMessage>& messages);
+
+    /// Cancel an in-progress completion.
+    /// Thread-safe: can be called from any thread.
+    Q_INVOKABLE void cancelCompletion();
+
+signals:
+    void isLoadedChanged();
+    void isGeneratingChanged();
+    void modelPathChanged();
+    void contextLengthChanged();
+    void gpuLayersChanged();
+    void loadFailed(const QString& error);
+
+    /// Emitted for each generated token (streaming to UI).
+    void tokenGenerated(const QString& token);
+
+    /// Emitted when the full generation is complete.
+    void generationComplete(const QString& fullText);
+
+    /// Emitted when a tool call is detected in the model output.
+    void toolCallDetected(const QString& toolName, const QString& arguments);
+
+private:
+    /// Internal: runs the decode/sample loop. Called on the engine's thread.
+    void runCompletion(const QList<ChatMessage>& messages);
+
+    /// Internal: reset the sampler chain. Call only on engine's thread.
+    void resetSampler();
+
+    void setIsGenerating(bool generating);
+
+    bool m_isLoaded = false;
+    bool m_isGenerating = false;
+    QString m_modelPath;
+    int m_contextLength = 4096;
+    int m_gpuLayers = 0;
+
+    // Owned llama.cpp objects (raw pointers — freed in destructor/unloadModel)
+    llama_model* m_model = nullptr;
+    llama_context* m_ctx = nullptr;
+    llama_sampler* m_sampler = nullptr;
+    common_chat_templates* m_chatTemplates = nullptr;
+
+    // Cancellation flag — atomic for thread-safe signaling
+    std::atomic<bool> m_cancelled{false};
+};
+
+Q_DECLARE_METATYPE(ChatMessage)
