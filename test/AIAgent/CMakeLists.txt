@@ -192,3 +192,21 @@ target_include_directories(test_react_loop
         ${CMAKE_SOURCE_DIR}/extern/llama.cpp/common
         ${CMAKE_SOURCE_DIR}/extern/llama.cpp/ggml/include
 )
+
+# test_context_injection: System prompts and context serialization tests.
+# Validates prompt content, vehicle variants, and JSON context structure.
+add_executable(test_context_injection
+    test_context_injection.cpp
+    ${CMAKE_SOURCE_DIR}/src/AIAgent/AgentContextSerializer.cpp
+)
+target_link_libraries(test_context_injection
+    PRIVATE
+        AIAgentModule
+        Qt6::Core
+        nlohmann_json::nlohmann_json
+)
+target_include_directories(test_context_injection
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src/AIAgent
+)
