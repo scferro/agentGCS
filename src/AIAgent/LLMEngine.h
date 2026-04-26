@@ -49,7 +49,7 @@ class LLMEngine : public QObject {
 
 public:
     explicit LLMEngine(QObject* parent = nullptr);
-    ~LLMEngine();
+    virtual ~LLMEngine();
 
     bool isLoaded() const { return m_isLoaded; }
     bool isGenerating() const { return m_isGenerating; }
@@ -70,28 +70,28 @@ public:
     /// Load the GGUF model from modelPath(). Creates the llama context and
     /// initializes chat templates for Gemma 4 tool-calling support.
     /// Returns true on success, false on failure (emits loadFailed).
-    Q_INVOKABLE bool loadModel();
+    Q_INVOKABLE virtual bool loadModel();
 
     /// Unload the current model and free all llama.cpp resources.
-    Q_INVOKABLE void unloadModel();
+    Q_INVOKABLE virtual void unloadModel();
 
     /// Register tools that the LLM can invoke during completion.
     /// Tools are passed to the chat template so the model knows what's available.
     /// Call before startCompletion(). Replaces any previously registered tools.
-    Q_INVOKABLE void setTools(const QList<AgentTool>& tools);
+    Q_INVOKABLE virtual void setTools(const QList<AgentTool>& tools);
 
     /// Remove all registered tools.
-    Q_INVOKABLE void clearTools();
+    Q_INVOKABLE virtual void clearTools();
 
     /// Start a completion cycle with the given message history.
     /// Runs the decode/sample loop on the engine's thread, emitting
     /// tokenGenerated for each token and generationComplete when done.
     /// If a tool call is detected, emits toolCallDetected and stops.
-    Q_INVOKABLE void startCompletion(const QList<ChatMessage>& messages);
+    Q_INVOKABLE virtual void startCompletion(const QList<ChatMessage>& messages);
 
     /// Cancel an in-progress completion.
     /// Thread-safe: can be called from any thread.
-    Q_INVOKABLE void cancelCompletion();
+    Q_INVOKABLE virtual void cancelCompletion();
 
 signals:
     void isLoadedChanged();

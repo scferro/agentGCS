@@ -165,3 +165,30 @@ target_include_directories(${CMAKE_PROJECT_NAME}
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/src/AIAgent/Tools
 )
+
+# test_react_loop: AgentController ReAct loop test with MockLLMEngine.
+# Tests the full send → tool call → stage → approve/reject → re-call cycle.
+add_executable(test_react_loop
+    test_react_loop.cpp
+    ${CMAKE_SOURCE_DIR}/src/AIAgent/MockLLMEngine.h
+)
+target_link_libraries(test_react_loop
+    PRIVATE
+        AIAgentModule
+        Qt6::Core
+        nlohmann_json::nlohmann_json
+        llama
+        llama-common
+)
+# Suppress -Wshadow and -Wunused-function warnings from llama.cpp headers.
+set_source_files_properties(
+    test_react_loop.cpp
+    PROPERTIES COMPILE_FLAGS "-Wno-shadow -Wno-unused-function"
+)
+target_include_directories(test_react_loop
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/AIAgent
+        ${CMAKE_SOURCE_DIR}/extern/llama.cpp/include
+        ${CMAKE_SOURCE_DIR}/extern/llama.cpp/common
+        ${CMAKE_SOURCE_DIR}/extern/llama.cpp/ggml/include
+)
