@@ -117,3 +117,34 @@ target_include_directories(test_agent_tool_registry
     PRIVATE
         ${CMAKE_SOURCE_DIR}/src/AIAgent
 )
+
+# test_add_tools_schema: Standalone schema/availability test for add tools.
+# Uses stub tool classes (no execute() deps needed) so it can run headlessly
+# in Docker without the full QGC codebase.
+add_executable(test_add_tools_schema
+    test_add_tools_schema.cpp
+)
+target_link_libraries(test_add_tools_schema
+    PRIVATE
+        AIAgentModule
+        Qt6::Core
+        nlohmann_json::nlohmann_json
+)
+target_include_directories(test_add_tools_schema
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src/AIAgent
+)
+
+# QGC-internal mission add tools test (compiles into QGroundControl binary)
+# Run via: ./QGroundControl --unittest:AddToolsTest
+target_sources(${CMAKE_PROJECT_NAME}
+    PRIVATE
+        AddToolsTest.cc
+        AddToolsTest.h
+)
+target_include_directories(${CMAKE_PROJECT_NAME}
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src/AIAgent/Tools
+)
