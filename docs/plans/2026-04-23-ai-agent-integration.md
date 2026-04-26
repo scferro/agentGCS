@@ -14,7 +14,7 @@
 
 **Principle:** Every PR does ONE thing and has a clear test/verification. More small PRs are better than fewer large ones.
 
-**Reorder rationale (Apr 24):** Model management was PR 14 (Phase 5) in the original plan — too late. Without settings/model downloader, there's no way for a user to actually *use* the AI agent in QGC. Moved it to PR 6 so that by the time we build the UI (PR 12+), the backend is fully functional end-to-end.
+**Reorder rationale (Apr 24):** Model management was PR 17 (Phase 5) in the original plan — too late. Without settings/model downloader, there's no way for a user to actually *use* the AI agent in QGC. Moved it to PR 7 so that by the time we build the UI (PR 14+), the backend is fully functional end-to-end.
 
 | PR | Phase | Tasks | Scope | Test Method | Est. Size | Status |
 |----|-------|-------|-------|-------------|-----------|--------|
@@ -24,15 +24,15 @@
 | 4 | 1 | 1.2 | LLMEngine streaming completion | CTest: token signals fire | Small | ✅ Done |
 || 5 | 1 | 1.3 | LLMEngine tool calling support | CTest: tool call parsed + emitted | Small | ✅ Done ||
 6 | 5→1.5 | 5.1–5.2 | **Settings panel + model downloader** | Persist test + small download | Medium | ✅ Done ||
-7 | 2 | 2.1 | AgentToolBase + Registry | CTest: filtering logic | Small | 🔄 Next ||
-| 8 | 2 | 2.2 | 7 mission "add" tools | CTest: schema + availability | Medium | 📋 Queued |
-| 9 | 2 | 2.3–2.4 | 4 edit tools + 5 guided tools | CTest: schema + availability | Medium | 📋 Queued |
-| 10 | 3 | 3.1 | AgentController with ReAct loop | CTest: mock LLM cycle | Medium | 📋 Queued |
-| 11 | 3 | 3.2 | System prompts + context injection | CTest: expected key presence | Small | 📋 Queued |
-| 12 | 4 | 4.4 + 4.2–4.3 | ChatView + ActionCard + SlideToAccept | qmllint + manual | Small | 📋 Queued |
-| 13 | 4 | 4.1+4.5 | Sidebar + MainWindow integration | qmllint + X11 visual | Small | 📋 Queued |
-| 14 | 6 | 6.1–6.2 | Safety validator + map overlay | CTest safety + manual map | Medium | 📋 Queued |
-| 15 | 6 | 6.3 | Multimodal input stub | Build compiles | Tiny | 📋 Queued |
+| 7 | 2 | 2.1 | AgentToolBase + Registry | CTest: filtering logic | Small | ✅ Done ||
+| 8→10 | 2 | 2.2 | 7 mission "add" tools | CTest: schema + availability | Medium | ✅ Done ||
+| 9→11 | 2 | 2.3–2.4 | 4 edit tools + 5 guided tools | CTest: schema + availability | Medium | 📋 Queued ||
+| 10→12 | 3 | 3.1 | AgentController with ReAct loop | CTest: mock LLM cycle | Medium | 🔄 Next ||
+| 11→13 | 3 | 3.2 | System prompts + context injection | CTest: expected key presence | Small | 📋 Queued ||
+| 12→14 | 4 | 4.4 + 4.2–4.3 | ChatView + ActionCard + SlideToAccept | qmllint + manual | Small | 📋 Queued ||
+| 13→15 | 4 | 4.1+4.5 | Sidebar + MainWindow integration | qmllint + X11 visual | Small | 📋 Queued ||
+| 14→16 | 6 | 6.1–6.2 | Safety validator + map overlay | CTest safety + manual map | Medium | 📋 Queued ||
+| 15→17 | 6 | 6.3 | Multimodal input stub | Build compiles | Tiny | 📋 Queued ||
 
 **Total: 15 PRs, 23 tasks**
 
@@ -360,7 +360,7 @@ git commit -m "feat: add tool definition schema support for Gemma 4 tool calling
 
 ## Phase 2 — Tool Registry (C++ Port of mav-agent Tools)
 
-### Task 2.1 [PR 6]: Create AgentTool base class and registry
+### Task 2.1 [PR 8]: Create AgentTool base class and registry
 
 **Objective:** Define the C++ equivalent of mav-agent's `MAVLinkToolBase` and a registry that filters tools by vehicle type and mode.
 
@@ -431,7 +431,7 @@ git commit -m "feat: add AgentTool base class and registry with mode/vehicle fil
 
 ---
 
-### Task 2.2 [PR 7]: Implement mission-item tools (7 add tools)
+### Task 2.2 [PR 10]: Implement mission-item tools (7 add tools)
 
 **Objective:** Port the 7 "add" tools from mav-agent, executing against QGC's `PlanMasterController` and `MissionController` APIs.
 
@@ -502,7 +502,7 @@ git commit -m "feat: implement 7 mission-item add tools ported from mav-agent"
 
 ---
 
-### Task 2.3–2.4 [PR 8]: Implement editing tools + guided action tools
+### Task 2.3–2.4 [PR 11]: Implement editing tools + guided action tools
 
 **Objective:** Port the 4 editing tools (mission-mode only) and 5 guided action tools (command-mode with live vehicle).
 
@@ -560,7 +560,7 @@ git commit -m "feat: implement 4 mission editing tools + 5 guided action tools"
 
 ## Phase 3 — Agent Controller (ReAct Loop)
 
-### Task 3.1 [PR 9]: Create AgentController class
+### Task 3.1 [PR 12]: Create AgentController class
 
 **Objective:** Orchestrate the ReAct (Reason+Act) loop: user message → LLM reasoning → tool call → tool result → LLM reasoning → ... → final response.
 
@@ -663,7 +663,7 @@ Test cases:
 - `testSingleToolCallAndResponse()` — verify full cycle: send → tool call → stage → approve → execute → LLM re-call → text response
 - `testActionApprovalAndExecution()` — verify approved action executes tool
 - `testActionRejection()` — verify rejected action appends "rejected" message, LLM re-called
-- `testSafetyBlock()` — (placeholder, fails until PR 15)
+- `testSafetyBlock()` — (placeholder, fails until PR 17)
 - `testModeSwitchingClearsState()` — verify mode change resets pending actions and chat
 
 **Test/Verification:** CTest passes. Full ReAct cycle validated with mock LLM.
@@ -677,7 +677,7 @@ git commit -m "feat: add AgentController with ReAct loop and action approval sta
 
 ---
 
-### Task 3.2 [PR 10]: System prompt and context injection
+### Task 3.2 [PR 13]: System prompt and context injection
 
 **Objective:** Port mav-agent's system prompts and add real-time vehicle state context.
 
@@ -716,7 +716,7 @@ git commit -m "feat: add system prompts and real-time state context injection"
 
 ## Phase 4 — QML Chat Sidebar UI
 
-### Task 4.4 [PR 11]: Create AIAgentSlideToAccept — safety confirmation widget
+### Task 4.4 [PR 14]: Create AIAgentSlideToAccept — safety confirmation widget
 
 **Objective:** Implement the slide-to-accept gesture that prevents accidental action approval. This is a standalone component with no backend dependency — good to ship first.
 
@@ -799,7 +799,7 @@ git commit -m "feat: implement slide-to-accept safety confirmation widget"
 
 ---
 
-### Task 4.2–4.3 [PR 12]: Create AIAgentChatView + AIAgentActionCard
+### Task 4.2–4.3 [PR 15]: Create AIAgentChatView + AIAgentActionCard
 
 **Objective:** Chat interface with scrollable message history, user input field, action approval cards.
 
@@ -933,7 +933,7 @@ git commit -m "feat: implement AIAgentChatView with message list and AIAgentActi
 
 ---
 
-### Task 4.1+4.5 [PR 13]: AIAgentSidebar + MainWindow integration
+### Task 4.1+4.5 [PR 16]: AIAgentSidebar + MainWindow integration
 
 **Objective:** Build the collapsible sidebar that slides in from the left, and integrate it into MainWindow with mode switching.
 
@@ -1049,7 +1049,7 @@ git commit -m "feat: integrate AIAgentSidebar into MainWindow with mode switchin
 
 ## Phase 5 — Model Management & Settings
 
-### Task 5.1–5.2 [PR 14]: AI Agent settings panel + model downloader
+### Task 5.1–5.2 [PR 7]: AI Agent settings panel + model downloader
 
 **Objective:** Create a settings page for model path, GPU layers, context length, and a one-click Gemma 4 model downloader from HuggingFace.
 
@@ -1109,7 +1109,7 @@ git commit -m "feat: add AI Agent settings panel, model downloader, and FactGrou
 
 ## Phase 6 — Polish & Safety
 
-### Task 6.1 [PR 15]: Implement action preview on map
+### Task 6.1 [PR 17]: Implement action preview on map
 
 **Objective:** When proposed actions are staged, show visual cues on the QGC map (e.g., new waypoints, takeoff marker, survey polygon).
 
@@ -1143,7 +1143,7 @@ git commit -m "feat: add map overlay preview for proposed AI agent actions"
 
 ---
 
-### Task 6.2 [PR 15]: Safety validation layer
+### Task 6.2 [PR 17]: Safety validation layer
 
 **Objective:** Before any action is presented to the user for approval, run safety checks and display warnings.
 
@@ -1187,7 +1187,7 @@ git commit -m "feat: add safety validation layer for proposed agent actions"
 
 ---
 
-### Task 6.3 [PR 15]: Multimodal input (future-proofing)
+### Task 6.3 [PR 17]: Multimodal input (future-proofing)
 
 **Objective:** Since Gemma 4 is multimodal (any-to-any), prepare the architecture for future video/image input.
 
