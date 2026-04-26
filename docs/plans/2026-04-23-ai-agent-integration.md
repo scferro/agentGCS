@@ -16,25 +16,26 @@
 
 **Reorder rationale (Apr 24):** Model management was PR 17 (Phase 5) in the original plan — too late. Without settings/model downloader, there's no way for a user to actually *use* the AI agent in QGC. Moved it to PR 7 so that by the time we build the UI (PR 14+), the backend is fully functional end-to-end.
 
-| PR | Phase | Tasks | Scope | Test Method | Est. Size | Status |
-|----|-------|-------|-------|-------------|-----------|--------|
-| 1 | 0 | 0.1 | Add llama.cpp as CMake subproject | Build `llama` target in Docker | Tiny | ✅ Done |
-| 2 | 0 | 0.2 | Create AIAgent module skeleton | Build `AIAgentModule` target | Small | ✅ Done |
-| 3 | 1 | 1.1 | LLMEngine model loading + unloading | CTest: load a GGUF model | Small | ✅ Done |
-| 4 | 1 | 1.2 | LLMEngine streaming completion | CTest: token signals fire | Small | ✅ Done |
-|| 5 | 1 | 1.3 | LLMEngine tool calling support | CTest: tool call parsed + emitted | Small | ✅ Done ||
-6 | 5→1.5 | 5.1–5.2 | **Settings panel + model downloader** | Persist test + small download | Medium | ✅ Done ||
-| 7 | 2 | 2.1 | AgentToolBase + Registry | CTest: filtering logic | Small | ✅ Done ||
-| 8→10 | 2 | 2.2 | 7 mission "add" tools | CTest: schema + availability | Medium | ✅ Done ||
-| 9→11 | 2 | 2.3–2.4 | 4 edit tools + 5 guided tools | CTest: schema + availability | Medium | 📋 Queued ||
-| 10→12 | 3 | 3.1 | AgentController with ReAct loop | CTest: mock LLM cycle | Medium | 🔄 Next ||
-| 11→13 | 3 | 3.2 | System prompts + context injection | CTest: expected key presence | Small | 📋 Queued ||
-| 12→14 | 4 | 4.4 + 4.2–4.3 | ChatView + ActionCard + SlideToAccept | qmllint + manual | Small | 📋 Queued ||
-| 13→15 | 4 | 4.1+4.5 | Sidebar + MainWindow integration | qmllint + X11 visual | Small | 📋 Queued ||
-| 14→16 | 6 | 6.1–6.2 | Safety validator + map overlay | CTest safety + manual map | Medium | 📋 Queued ||
-| 15→17 | 6 | 6.3 | Multimodal input stub | Build compiles | Tiny | 📋 Queued ||
+|| PR | Phase | Tasks | Scope | Test Method | Est. Size | Status ||
+||----|-------|-------|-------|-------------|-----------|--------|-
+|| 1 | 0 | 0.1 | Add llama.cpp as CMake subproject | Build `llama` target in Docker | Tiny | ✅ Done ||
+|| 2 | 0 | 0.2 | Create AIAgent module skeleton | Build `AIAgentModule` target | Small | ✅ Done ||
+|| 3 | 1 | 1.1 | LLMEngine model loading + unloading | CTest: load a GGUF model | Small | ✅ Done ||
+|| 4 | 1 | 1.2 | LLMEngine streaming completion | CTest: token signals fire | Small | ✅ Done ||
+||| 5 | 1 | 1.3 | LLMEngine tool calling support | CTest: tool call parsed + emitted | Small | ✅ Done ||
+| 5b | 1 | 1.4 | LLMEngine grammar-constrained generation + streaming tool detection | CTest: constrained output + incremental parse | Medium | 📋 Queued |
+| 6 | 5→1.5 | 5.1–5.2 | **Settings panel + model downloader** | Persist test + small download | Medium | ✅ Done |
+| 7 | 2 | 2.1 | AgentToolBase + Registry | CTest: filtering logic | Small | ✅ Done |
+| 8→10 | 2 | 2.2 | 7 mission "add" tools | CTest: schema + availability | Medium | ✅ Done |
+| 9→11 | 2 | 2.3–2.4 | 4 edit tools + 5 guided tools | CTest: schema + availability | Medium | ✅ Done |
+| 10→12 | 3 | 3.1 | AgentController with ReAct loop | CTest: mock LLM cycle | Medium | ✅ Done |
+| 11→13 | 3 | 3.2 | System prompts + context injection | CTest: expected key presence | Small | 📋 Queued |
+| 12→14 | 4 | 4.4 + 4.2–4.3 | ChatView + ActionCard + SlideToAccept | qmllint + manual | Small | 📋 Queued |
+| 13→15 | 4 | 4.1+4.5 | Sidebar + MainWindow integration | qmllint + X11 visual | Small | 📋 Queued |
+| 14→16 | 6 | 6.1–6.2 | Safety validator + map overlay | CTest safety + manual map | Medium | 📋 Queued |
+| 15→17 | 6 | 6.3 | Multimodal input stub | Build compiles | Tiny | 📋 Queued |
 
-**Total: 15 PRs, 23 tasks**
+**Total: 16 PRs, 24 tasks**
 
 ### Test Models
 
@@ -354,6 +355,199 @@ Create `test/AIAgent/test_llm_engine_tool_calling.cpp`:
 ```bash
 git add src/AIAgent/ test/AIAgent/
 git commit -m "feat: add tool definition schema support for Gemma 4 tool calling"
+```
+
+---
+
+### Task 1.4 [PR 5b]: Grammar-constrained generation + streaming tool detection
+
+**Objective:** Enhance `LLMEngine::runCompletion` to use llama.cpp's grammar-constrained generation and lazy grammar triggers so that tool call outputs are always syntactically valid, and enable incremental/streaming tool call detection so the agent can react faster.
+
+**Background:** The current `runCompletion` already uses `common_chat_templates_apply` (which returns a `grammar` field, `grammar_triggers`, and `preserved_tokens` in `m_lastChatParams`) and `common_chat_parse` for post-generation parsing. However, three critical features are NOT used:
+
+1. **Grammar-constrained generation** (`m_lastChatParams.grammar`) — Forces the model to output valid JSON/tool-call syntax during generation. Without this, the model can hallucinate malformed tool calls (e.g., truncated JSON, wrong brackets) that fail to parse.
+2. **Lazy grammar triggers** (`m_lastChatParams.grammar_triggers`) — Only activate the grammar constraint when tool call patterns appear in the output. This avoids constraining the model during normal text generation, preserving response quality.
+3. **Streaming tool call detection** (`common_chat_parse` with `is_partial=true`) — Parse tool calls incrementally as tokens arrive, rather than waiting for full generation to complete. Enables the agent to start staging actions earlier.
+
+**Files:**
+- Modify: `src/AIAgent/LLMEngine.h` (add grammar sampler members, streaming parse state)
+- Modify: `src/AIAgent/LLMEngine.cpp` (integrate grammar sampler, streaming parse)
+- Create: `test/AIAgent/test_grammar_constrained.cpp`
+
+**Step 1: Add grammar sampler infrastructure to LLMEngine.h**
+
+Add members to track grammar state:
+
+```cpp
+private:
+    // Grammar-constrained generation state
+    llama_sampler* m_grammarSampler = nullptr;  // Owned, freed in resetSampler/unloadModel
+    bool m_grammarActive = false;                  // Whether lazy grammar has been triggered
+    std::vector<std::string> m_preservedTokens;    // Tokens to protect from BPE merging
+
+    // Streaming tool call detection state
+    std::string m_pendingPartialText;              // Accumulated text for incremental parsing
+    bool m_hasActiveTools = false;                  // Whether tools were registered for this completion
+```
+
+Add a new signal for streaming tool call detection:
+
+```cpp
+signals:
+    /// Emitted when a tool call is detected during generation (before generationComplete).
+    /// Allows the AgentController to stage actions for approval sooner.
+    void toolCallDetectedStreaming(const QString& toolName, const QString& arguments);
+```
+
+**Step 2: Implement grammar sampler creation in runCompletion()**
+
+After `common_chat_templates_apply` (step 3 in current code), create the grammar sampler when tools are present:
+
+```cpp
+// After: m_lastChatParams = common_chat_templates_apply(m_chatTemplates, inputs);
+
+m_hasActiveTools = !chatTools.empty();
+
+// --- 3b. Set up grammar-constrained generation ---
+if (!m_lastChatParams.grammar.empty()) {
+    const llama_vocab* vocab = llama_model_get_vocab(m_model);
+
+    if (m_lastChatParams.grammar_lazy && !m_lastChatParams.grammar_triggers.empty()) {
+        // Lazy grammar: only constrain when trigger patterns/tokens appear
+        std::vector<const char*> triggerPatterns;
+        std::vector<llama_token> triggerTokens;
+
+        for (const auto& trigger : m_lastChatParams.grammar_triggers) {
+            if (trigger.type == COMMON_GRAMMAR_TRIGGER_TYPE_PATTERN) {
+                triggerPatterns.push_back(trigger.value.c_str());
+            } else if (trigger.type == COMMON_GRAMMAR_TRIGGER_TYPE_TOKEN) {
+                // Look up the token ID from the token string
+                // (trigger.value may contain a token text; tokenize to find ID)
+                const auto tokens = common_tokenize(vocab, trigger.value, false, false);
+                for (auto tok : tokens) {
+                    triggerTokens.push_back(tok);
+                }
+            }
+        }
+
+        m_grammarSampler = llama_sampler_init_grammar_lazy_patterns(
+            vocab,
+            m_lastChatParams.grammar.c_str(),
+            "root",
+            triggerPatterns.empty() ? nullptr : triggerPatterns.data(),
+            triggerPatterns.size(),
+            triggerTokens.empty() ? nullptr : triggerTokens.data(),
+            triggerTokens.size()
+        );
+        m_grammarActive = false; // Will be activated by trigger during generation
+    } else {
+        // Eager grammar: always constrain when tools are present
+        m_grammarSampler = llama_sampler_init_grammar(
+            vocab,
+            m_lastChatParams.grammar.c_str(),
+            "root"
+        );
+        m_grammarActive = true;
+    }
+}
+```
+
+**Step 3: Integrate grammar sampler into the generation loop**
+
+In the generation loop (step 8), add the grammar sampler to the sampling chain:
+
+```cpp
+// Before the while loop, reset grammar tracking
+m_grammarActive = (m_grammarSampler != nullptr) && !m_lastChatParams.grammar_lazy;
+m_pendingPartialText.clear();
+
+while (nGenerated < maxTokens) {
+    // ... existing cancellation check and sampling ...
+
+    llama_token newToken = llama_sampler_sample(m_sampler, m_ctx, -1);
+
+    // Feed the token through the grammar sampler if active
+    if (m_grammarSampler) {
+        llama_sampler_accept(m_grammarSampler, newToken);
+    }
+
+    // ... existing EOS and stop token checks ...
+
+    // Streaming: accumulate text for incremental parsing
+    const std::string tokenStr = common_token_to_piece(m_ctx, newToken, false);
+    m_pendingPartialText += tokenStr;
+    const QString tokenQStr = QString::fromStdString(tokenStr);
+
+    generatedText += tokenQStr;
+    emit tokenGenerated(tokenQStr);
+
+    llama_sampler_accept(m_sampler, newToken);
+
+    // --- Streaming tool call detection ---
+    if (m_hasActiveTools && m_pendingPartialText.size() > 10) {
+        common_chat_parser_params parserParams(m_lastChatParams);
+        parserParams.parse_tool_calls = true;
+        if (!m_lastChatParams.parser.empty()) {
+            parserParams.parser.load(m_lastChatParams.parser);
+        }
+
+        // Parse as partial (is_partial=true) to detect tool calls incrementally
+        const common_chat_msg partialParsed = common_chat_parse(
+            m_pendingPartialText, true, parserParams);
+
+        // If a complete tool call is detected incrementally, emit it early
+        if (!partialParsed.tool_calls.empty()) {
+            for (const auto& tc : partialParsed.tool_calls) {
+                emit toolCallDetectedStreaming(
+                    QString::fromStdString(tc.name),
+                    QString::fromStdString(tc.arguments)
+                );
+            }
+        }
+    }
+
+    // ... existing batch decode ...
+}
+```
+
+**Step 4: Clean up grammar sampler**
+
+In `resetSampler()` and `unloadModel()`, free the grammar sampler:
+
+```cpp
+void LLMEngine::resetSampler() {
+    // ... existing sampler reset ...
+
+    if (m_grammarSampler) {
+        llama_sampler_free(m_grammarSampler);
+        m_grammarSampler = nullptr;
+    }
+    m_grammarActive = false;
+    m_pendingPartialText.clear();
+}
+```
+
+**Step 5: Write CTest**
+
+Create `test/AIAgent/test_grammar_constrained.cpp`:
+
+The test validates grammar-constrained generation and streaming detection at the unit level (no model loading required — mock the grammar sampler creation):
+
+- `testGrammarCreatedWhenToolsPresent()` — Verify that when `startCompletion` is called with tools, `m_grammarSampler` is non-null (the grammar string from `m_lastChatParams` is non-empty and a sampler is created).
+- `testNoGrammarWhenNoTools()` — Verify that when no tools are registered, `m_grammarSampler` is nullptr and generation proceeds without grammar constraints.
+- `testPreservedTokensPopulated()` — After `startCompletion` with tools, verify `m_lastChatParams.preserved_tokens` is non-empty (llama.cpp provides these for tool-call formatting tokens).
+- `testAdditionalStopsIncludeToolCallStops()` — After `startCompletion` with tools, verify `m_lastChatParams.additional_stops` contains tool-call end markers.
+- `testStreamingParseAccumulates()` — Verify that `m_pendingPartialText` accumulates across tokens during generation.
+
+**Note:** Full end-to-end grammar-constrained generation testing (where the model actually generates valid tool calls) requires a loaded GGUF model and is deferred to integration testing. These unit tests validate the plumbing is connected correctly.
+
+**Test/Verification:** CTest passes. Grammar sampler is created when tools are present, lazy grammar triggers are configured, and streaming parse infrastructure is wired.
+
+**Step 6: Commit**
+
+```bash
+git add src/AIAgent/LLMEngine.h src/AIAgent/LLMEngine.cpp test/AIAgent/test_grammar_constrained.cpp test/AIAgent/CMakeLists.txt
+git commit -m "feat: add grammar-constrained generation and streaming tool call detection"
 ```
 
 ---
@@ -1217,7 +1411,8 @@ git commit -m "feat: add multimodal input stub for future video/image support"
 | Risk | Mitigation |
 |------|------------|
 | llama.cpp build conflicts with QGC's Qt6/CMake | Use `EXCLUDE_FROM_ALL` and only link `llama` static lib; test early in PR 1 |
-| Gemma 4 tool calling format not well-supported | llama.cpp has explicit `COMMON_CHAT_FORMAT_PEG_GEMMA4`; fallback: use generic grammar-constrained JSON output |
+| Gemma 4 tool calling format not well-supported | llama.cpp has explicit `COMMON_CHAT_FORMAT_PEG_GEMMA4`; fallback: use generic grammar-constrained JSON output (PR 5b) |
+| Grammar constraining degrades text response quality | Lazy grammar triggers (PR 5b) only constrain when tool call patterns appear — normal text is unconstrained |
 | QGC MissionController API not well-documented | Read `MissionController.h` thoroughly; prototype tool calls in a test before full integration |
 | Blocking UI during LLM inference | LLMEngine runs on dedicated QThread; all signals cross thread boundary via Qt::QueuedConnection |
 | Tool execution race conditions | Proposed actions are queued; only one executes at a time; AgentController is single-threaded for state |
