@@ -227,3 +227,14 @@ if(QGC_CUSTOM_BUILD)
 
     message(STATUS "QGC: Custom build configuration applied")
 endif()
+
+# ============================================================================
+# Propagate main target include directories to AIAgentModule
+# Tool implementations include QGC subsystem headers that have deep transitive
+# include chains. We propagate the main target's accumulated include directories
+# so AIAgentModule (and its AUTOMOC) can access all QGC headers.
+get_target_property(_qgc_inc_dirs ${CMAKE_PROJECT_NAME} INCLUDE_DIRECTORIES)
+if(_qgc_inc_dirs)
+    list(REMOVE_DUPLICATES _qgc_inc_dirs)
+    target_include_directories(AIAgentModule PRIVATE ${_qgc_inc_dirs})
+endif()

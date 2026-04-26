@@ -22,8 +22,8 @@ public:
     virtual QJsonObject parameters() const = 0;   // JSON schema object
     virtual QString execute(const QJsonObject& args) = 0;  // Returns result string
 
-    virtual bool availableInMode(const QString& mode) const { return true; }
-    virtual bool availableForVehicle(const QString& vehicleType) const { return true; }
+    virtual bool availableInMode(const QString& /*mode*/) const { return true; }
+    virtual bool availableForVehicle(const QString& /*vehicleType*/) const { return true; }
 
     /// Convenience: returns the full tool definition as a JSON object suitable for LLM function calling
     QJsonObject toolDefinition() const;

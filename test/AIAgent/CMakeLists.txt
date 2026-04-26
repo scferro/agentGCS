@@ -117,3 +117,16 @@ target_include_directories(test_agent_tool_registry
     PRIVATE
         ${CMAKE_SOURCE_DIR}/src/AIAgent
 )
+
+# QGC-internal mission add tools test (compiles into QGroundControl binary)
+# Run via: ./QGroundControl --unittest:AddToolsTest
+target_sources(${CMAKE_PROJECT_NAME}
+    PRIVATE
+        AddToolsTest.cc
+        AddToolsTest.h
+)
+target_include_directories(${CMAKE_PROJECT_NAME}
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src/AIAgent/Tools
+)
