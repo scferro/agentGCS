@@ -148,6 +148,8 @@ void LLMEngine::unloadModel()
         m_chatTemplates = nullptr;
     }
 
+    resetGrammarSampler();
+
     if (m_sampler) {
         llama_sampler_free(m_sampler);
         m_sampler = nullptr;
@@ -205,6 +207,18 @@ void LLMEngine::resetSampler()
     llama_sampler_chain_add(m_sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
 }
 
+void LLMEngine::resetGrammarSampler()
+{
+    if (m_grammarSampler) {
+        llama_sampler_free(m_grammarSampler);
+        m_grammarSampler = nullptr;
+    }
+    m_grammarActive = false;
+    m_preservedTokens.clear();
+    m_pendingPartialText.clear();
+    m_emittedStreamingToolCalls.clear();
+}
+
 // ---------------------------------------------------------------------------
 // Completion
 // ---------------------------------------------------------------------------
@@ -244,6 +258,10 @@ void LLMEngine::setIsGenerating(bool generating)
 void LLMEngine::runCompletion(const QList<ChatMessage>& messages)
 {
     setIsGenerating(true);
+
+    // Reset grammar and streaming state from any previous completion
+    resetGrammarSampler();
+    m_hasActiveTools = !m_tools.empty();
 
     // --- 1. Build common_chat_msg list from ChatMessage input ---
     std::vector<common_chat_msg> chatMsgs;
@@ -297,6 +315,66 @@ void LLMEngine::runCompletion(const QList<ChatMessage>& messages)
         formattedPrompt += "assistant: ";
     }
 
+    // --- 3b. Set up grammar-constrained generation ---
+    if (m_chatTemplates && !m_lastChatParams.grammar.empty()) {
+        const llama_vocab* vocab = llama_model_get_vocab(m_model);
+
+        if (m_lastChatParams.grammar_lazy && !m_lastChatParams.grammar_triggers.empty()) {
+            // Lazy grammar: only constrain when trigger patterns/tokens appear
+            std::vector<const char*> triggerPatterns;
+            std::vector<llama_token> triggerTokens;
+
+            for (const auto& trigger : m_lastChatParams.grammar_triggers) {
+                if (trigger.type == COMMON_GRAMMAR_TRIGGER_TYPE_PATTERN ||
+                    trigger.type == COMMON_GRAMMAR_TRIGGER_TYPE_PATTERN_FULL) {
+                    triggerPatterns.push_back(trigger.value.c_str());
+                } else if (trigger.type == COMMON_GRAMMAR_TRIGGER_TYPE_WORD) {
+                    // WORD triggers: tokenize to find the corresponding token IDs
+                    const auto tokens = common_tokenize(vocab, trigger.value, false, false);
+                    for (auto tok : tokens) {
+                        triggerTokens.push_back(tok);
+                    }
+                } else if (trigger.type == COMMON_GRAMMAR_TRIGGER_TYPE_TOKEN) {
+                    // Direct token ID (stored in trigger.token)
+                    if (trigger.token != LLAMA_TOKEN_NULL) {
+                        triggerTokens.push_back(trigger.token);
+                    }
+                }
+            }
+
+            m_grammarSampler = llama_sampler_init_grammar_lazy_patterns(
+                vocab,
+                m_lastChatParams.grammar.c_str(),
+                "root",
+                triggerPatterns.empty() ? nullptr : triggerPatterns.data(),
+                triggerPatterns.size(),
+                triggerTokens.empty() ? nullptr : triggerTokens.data(),
+                triggerTokens.size()
+            );
+            m_grammarActive = false; // Will be activated by trigger during generation
+        } else {
+            // Eager grammar: always constrain when tools are present
+            m_grammarSampler = llama_sampler_init_grammar(
+                vocab,
+                m_lastChatParams.grammar.c_str(),
+                "root"
+            );
+            m_grammarActive = true;
+        }
+
+        if (!m_grammarSampler) {
+            qWarning() << "LLMEngine: Failed to create grammar sampler. Proceeding without grammar constraints.";
+        } else {
+            qDebug() << "LLMEngine: Grammar sampler created."
+                      << (m_lastChatParams.grammar_lazy ? "Lazy" : "Eager")
+                      << "grammar with" << m_lastChatParams.grammar_triggers.size()
+                      << "triggers.";
+        }
+    }
+
+    // Store preserved tokens for BPE merge protection
+    m_preservedTokens = m_lastChatParams.preserved_tokens;
+
     // --- 4. Tokenize the prompt ---
     const auto* vocab = llama_model_get_vocab(m_model);
     const bool addBos = llama_vocab_get_add_bos(vocab);
@@ -308,6 +386,7 @@ void LLMEngine::runCompletion(const QList<ChatMessage>& messages)
     if (static_cast<int32_t>(promptTokens.size()) >= nCtx) {
         emit loadFailed(QStringLiteral("Prompt too long (%1 tokens) for context (%2)")
                             .arg(promptTokens.size()).arg(nCtx));
+        resetGrammarSampler();
         setIsGenerating(false);
         return;
     }
@@ -318,6 +397,7 @@ void LLMEngine::runCompletion(const QList<ChatMessage>& messages)
     // --- 6. Decode the prompt (prefill) ---
     if (llama_decode(m_ctx, batch) != 0) {
         emit loadFailed(QStringLiteral("Failed to decode prompt batch"));
+        resetGrammarSampler();
         setIsGenerating(false);
         return;
     }
@@ -336,6 +416,10 @@ void LLMEngine::runCompletion(const QList<ChatMessage>& messages)
     QString generatedText;
     int nGenerated = 0;
     const int maxTokens = nCtx - static_cast<int32_t>(promptTokens.size());
+
+    // Reset streaming parse state
+    m_pendingPartialText.clear();
+    m_emittedStreamingToolCalls.clear();
 
     while (nGenerated < maxTokens) {
         // Check cancellation
@@ -369,8 +453,43 @@ void LLMEngine::runCompletion(const QList<ChatMessage>& messages)
         generatedText += tokenQStr;
         emit tokenGenerated(tokenQStr);
 
-        // Accept the token into the sampler state
+        // Accept the token through the grammar sampler if active
+        if (m_grammarSampler) {
+            llama_sampler_accept(m_grammarSampler, newToken);
+        }
+
+        // Accept the token into the main sampler state
         llama_sampler_accept(m_sampler, newToken);
+
+        // --- Streaming tool call detection ---
+        m_pendingPartialText += tokenStr;
+
+        if (m_hasActiveTools && m_pendingPartialText.size() > 20 && m_chatTemplates) {
+            common_chat_parser_params parserParams(m_lastChatParams);
+            parserParams.parse_tool_calls = true;
+            if (!m_lastChatParams.parser.empty()) {
+                parserParams.parser.load(m_lastChatParams.parser);
+            }
+
+            // Parse as partial (is_partial=true) — detects complete tool calls incrementally
+            const common_chat_msg partialParsed = common_chat_parse(
+                m_pendingPartialText, true, parserParams);
+
+            if (!partialParsed.tool_calls.empty()) {
+                for (const auto& tc : partialParsed.tool_calls) {
+                    const QString toolName = QString::fromStdString(tc.name);
+                    const QString toolArgs = QString::fromStdString(tc.arguments);
+
+                    // Deduplicate: each tool call gets a unique ID from the parser
+                    // Use name+args as a proxy key to avoid re-emitting
+                    const QString callKey = toolName + QStringLiteral(":") + toolArgs.left(50);
+                    if (!m_emittedStreamingToolCalls.contains(callKey)) {
+                        m_emittedStreamingToolCalls.insert(callKey);
+                        emit toolCallDetectedStreaming(toolName, toolArgs);
+                    }
+                }
+            }
+        }
 
         // Prepare the next batch (single token)
         auto nextBatch = llama_batch_get_one(&newToken, 1);
@@ -383,7 +502,7 @@ void LLMEngine::runCompletion(const QList<ChatMessage>& messages)
         nGenerated++;
     }
 
-    // --- 9. Parse the generated text for tool calls ---
+    // --- 9. Parse the generated text for tool calls (full parse) ---
     bool hadToolCalls = false;
 
     if (m_chatTemplates && !generatedText.isEmpty()) {
@@ -411,6 +530,7 @@ void LLMEngine::runCompletion(const QList<ChatMessage>& messages)
 
     // --- 10. Done ---
     llama_sampler_reset(m_sampler);
+    resetGrammarSampler();
     setIsGenerating(false);
     emit generationComplete(generatedText);
 

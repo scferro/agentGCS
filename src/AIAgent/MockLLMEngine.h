@@ -90,6 +90,7 @@ public:
         QTimer::singleShot(0, this, [this, r]() {
             if (r.type == ToolCall) {
                 emit toolCallDetected(r.toolName, r.arguments);
+                emit toolCallDetectedStreaming(r.toolName, r.arguments);
                 emit generationComplete("");
             } else if (r.type == TextOnly) {
                 // Simulate token streaming.

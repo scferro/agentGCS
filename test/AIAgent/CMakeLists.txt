@@ -210,3 +210,35 @@ target_include_directories(test_context_injection
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/src/AIAgent
 )
+
+# test_grammar_constrained: Grammar-constrained generation and streaming tool detection tests.
+# Unit tests run without a model; integration tests require a GGUF model path.
+add_executable(test_grammar_constrained
+    test_grammar_constrained.cpp
+    ${CMAKE_SOURCE_DIR}/src/AIAgent/MockLLMEngine.h
+)
+target_link_libraries(test_grammar_constrained
+    PRIVATE
+        AIAgentModule
+        Qt6::Core
+        nlohmann_json::nlohmann_json
+        llama
+        llama-common
+        ggml
+        ggml-base
+        ggml-cpu
+        stdc++fs
+)
+# Suppress -Wshadow and -Wunused-function warnings from llama.cpp headers.
+set_source_files_properties(
+    test_grammar_constrained.cpp
+    PROPERTIES COMPILE_FLAGS "-Wno-shadow -Wno-unused-function"
+)
+target_include_directories(test_grammar_constrained
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src/AIAgent
+        ${CMAKE_SOURCE_DIR}/extern/llama.cpp/include
+        ${CMAKE_SOURCE_DIR}/extern/llama.cpp/common
+        ${CMAKE_SOURCE_DIR}/extern/llama.cpp/ggml/include
+)

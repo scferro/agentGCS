@@ -1,10 +1,13 @@
 #pragma once
 
 #include <QtCore/QObject>
+#include <QtCore/QSet>
 #include <QtCore/QString>
 #include <QtCore/QThread>
 #include <QtCore/QMutex>
 #include <atomic>
+#include <string>
+#include <vector>
 
 struct llama_model;
 struct llama_context;
@@ -36,6 +39,19 @@ struct AgentTool {
 ///
 /// The inference loop runs on a background QThread to avoid blocking the UI.
 /// Call moveToThread() with a long-lived QThread before calling startCompletion().
+///
+/// Grammar-constrained generation:
+/// When tools are registered, common_chat_templates_apply produces a GBNF grammar
+/// and optional lazy trigger patterns. These are used to create a grammar sampler
+/// that constrains the model's output to valid tool-call JSON syntax. Lazy grammars
+/// only activate when tool-call patterns appear in the output, preserving response
+/// quality for normal text generation.
+///
+/// Streaming tool call detection:
+/// During generation, accumulated text is parsed incrementally with common_chat_parse
+/// (is_partial=true) so that complete tool calls can be detected and emitted before
+/// the full generation completes. This allows the AgentController to stage actions
+/// for approval sooner.
 class LLMEngine : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool isLoaded READ isLoaded NOTIFY isLoadedChanged)
@@ -110,8 +126,15 @@ signals:
     /// Emitted when the full generation is complete.
     void generationComplete(const QString& fullText);
 
-    /// Emitted when a tool call is detected in the model output.
+    /// Emitted when a tool call is detected in the model output
+    /// (post-generation parsing in step 9).
     void toolCallDetected(const QString& toolName, const QString& arguments);
+
+    /// Emitted when a tool call is detected during generation (streaming).
+    /// Allows the AgentController to stage actions for approval sooner.
+    /// Each tool call is emitted only once — duplicate detection prevents
+    /// re-emission of a call already reported via this signal.
+    void toolCallDetectedStreaming(const QString& toolName, const QString& arguments);
 
 private:
     /// Internal: runs the decode/sample loop. Called on the engine's thread.
@@ -119,6 +142,9 @@ private:
 
     /// Internal: reset the sampler chain. Call only on engine's thread.
     void resetSampler();
+
+    /// Internal: free grammar sampler resources. Call only on engine's thread.
+    void resetGrammarSampler();
 
     void setIsGenerating(bool generating);
 
@@ -142,6 +168,16 @@ private:
 
     // Chat format from the last template application (used for parsing tool calls)
     common_chat_params m_lastChatParams;
+
+    // Grammar-constrained generation state
+    llama_sampler* m_grammarSampler = nullptr;  // Owned, freed in resetGrammarSampler/unloadModel
+    bool m_grammarActive = false;                // Whether lazy grammar has been triggered
+    std::vector<std::string> m_preservedTokens;  // Tokens to protect from BPE merging
+
+    // Streaming tool call detection state
+    std::string m_pendingPartialText;            // Accumulated text for incremental parsing
+    bool m_hasActiveTools = false;                // Whether tools were registered for this completion
+    QSet<QString> m_emittedStreamingToolCalls;     // Tool call IDs already emitted via streaming
 
     // Cancellation flag — atomic for thread-safe signaling
     std::atomic<bool> m_cancelled{false};
