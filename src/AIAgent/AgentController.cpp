@@ -6,6 +6,9 @@
 #include <QtCore/QMetaObject>
 #include <QtCore/QThread>
 
+#include "AgentPrompts.h"
+#include "AgentContextSerializer.h"
+
 // ---------------------------------------------------------------------------
 // Construction
 // ---------------------------------------------------------------------------
@@ -303,38 +306,38 @@ void AgentController::appendChatMessage(const QString& role,
 }
 
 // ---------------------------------------------------------------------------
-// System prompt & context injection (stubs — PR 13 fills these in)
+// System prompt & context injection
 // ---------------------------------------------------------------------------
 
 void AgentController::injectSystemPrompt()
 {
-    // System prompt for the current mode. These are intentionally basic
-    // stubs — PR 13 (Task 3.2) ports the full mav-agent system prompts.
-    QString systemPrompt;
-    if (m_mode == "mission") {
-        systemPrompt = "You are an AI assistant for drone mission planning. "
-                       "You help users create and edit flight plans. "
-                       "You have access to tools for adding, editing, and removing mission items. "
-                       "Always confirm actions that modify the mission plan.";
-    } else {
-        systemPrompt = "You are an AI assistant for real-time drone control. "
-                       "You help users with live vehicle operations. "
-                       "You have access to guided action tools for controlling the vehicle. "
-                       "Always confirm actions before sending commands to the vehicle.";
-    }
+    // Build the system prompt for the current mode and vehicle type.
+    // Uses the prompts ported from mav-agent, with vehicle-specific additions.
+    QString systemPrompt = buildSystemPrompt(m_mode, m_vehicleType);
     appendChatMessage("system", systemPrompt);
+
+    // Inject runtime context after the system prompt.
+    if (m_mode == "mission") {
+        injectMissionState();
+    } else {
+        injectVehicleState();
+    }
 }
 
 void AgentController::injectMissionState()
 {
-    // Stub — PR 13 implements real MissionController state serialization.
-    appendChatMessage("user", "[Mission context: no active mission]");
+    // Serialize the current mission state as a JSON user-context message.
+    // This gives the LLM awareness of existing waypoints, takeoff items, etc.
+    // Currently returns stub data; real MissionController integration comes in PR 16.
+    appendChatMessage("user", missionContextMessage());
 }
 
 void AgentController::injectVehicleState()
 {
-    // Stub — PR 13 implements real Vehicle state serialization.
-    appendChatMessage("user", "[Vehicle context: no connected vehicle]");
+    // Serialize the current vehicle state as a JSON user-context message.
+    // This gives the LLM awareness of position, armed state, battery, etc.
+    // Currently returns stub data; real Vehicle integration comes in PR 16.
+    appendChatMessage("user", vehicleContextMessage());
 }
 
 // ---------------------------------------------------------------------------

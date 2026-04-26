@@ -26,6 +26,9 @@ target_sources(AIAgentModule
         AgentToolRegistry.cpp
         AgentController.h
         AgentController.cpp
+        AgentPrompts.h
+        AgentContextSerializer.h
+        AgentContextSerializer.cpp
 )
 
 target_include_directories(AIAgentModule PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

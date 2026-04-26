@@ -412,19 +412,23 @@ void testChatHistoryConsistency()
     QCoreApplication::processEvents();
 
     QVariantList history = controller.chatHistory();
-    TEST_ASSERT(history.size() >= 3, "Chat history has at least 3 entries (system + user + assistant)");
+    // Now: system prompt + context message + user message + assistant message
+    TEST_ASSERT(history.size() >= 4, "Chat history has at least 4 entries (system + context + user + assistant)");
 
     // First entry should be system prompt.
     TEST_ASSERT(history[0].toMap()["role"] == "system", "First chat entry is system prompt");
 
-    // Should have a user message.
+    // Second entry should be a user-context message (mission or vehicle state).
+    TEST_ASSERT(history[1].toMap()["role"] == "user", "Second chat entry is user context");
+
+    // Should have a user message with the actual sent text.
     bool hasUserMsg = false;
     for (const QVariant& item : history) {
         if (item.toMap()["role"] == "user" && item.toMap()["content"] == "Hello") {
             hasUserMsg = true;
         }
     }
-    TEST_ASSERT(hasUserMsg, "Chat history contains user message");
+    TEST_ASSERT(hasUserMsg, "Chat history contains user message 'Hello'");
 
     // Should have an assistant message.
     bool hasAssistantMsg = false;
@@ -515,11 +519,11 @@ void testSystemPromptPerMode()
     QList<ChatMessage> commandMessages = mockEngine->lastMessages();
     bool hasCommandPrompt = false;
     for (const ChatMessage& msg : commandMessages) {
-        if (msg.role == "system" && msg.content.contains("real-time drone control")) {
+        if (msg.role == "system" && msg.content.contains("drone command")) {
             hasCommandPrompt = true;
         }
     }
-    TEST_ASSERT(hasCommandPrompt, "Command mode system prompt mentions 'real-time drone control'");
+    TEST_ASSERT(hasCommandPrompt, "Command mode system prompt mentions 'drone command'");
 
     delete mockEngine;
 }
