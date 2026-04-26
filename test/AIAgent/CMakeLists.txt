@@ -136,6 +136,23 @@ target_include_directories(test_add_tools_schema
         ${CMAKE_SOURCE_DIR}/src/AIAgent
 )
 
+# test_edit_guided_tools_schema: Standalone schema/availability test for
+# mission edit tools + guided action tools.
+add_executable(test_edit_guided_tools_schema
+    test_edit_guided_tools_schema.cpp
+)
+target_link_libraries(test_edit_guided_tools_schema
+    PRIVATE
+        AIAgentModule
+        Qt6::Core
+        nlohmann_json::nlohmann_json
+)
+target_include_directories(test_edit_guided_tools_schema
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src/AIAgent
+)
+
 # QGC-internal mission add tools test (compiles into QGroundControl binary)
 # Run via: ./QGroundControl --unittest:AddToolsTest
 target_sources(${CMAKE_PROJECT_NAME}
