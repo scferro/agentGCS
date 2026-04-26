@@ -32,6 +32,24 @@ target_sources(${CMAKE_PROJECT_NAME}
         ${CMAKE_CURRENT_SOURCE_DIR}/AddSurveyTool.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/AddTransitionTool.h
         ${CMAKE_CURRENT_SOURCE_DIR}/AddTransitionTool.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/UpdateMissionItemTool.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/UpdateMissionItemTool.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/DeleteMissionItemTool.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/DeleteMissionItemTool.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/MoveItemTool.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/MoveItemTool.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/ReorderItemTool.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ReorderItemTool.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/GuidedTakeoffTool.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/GuidedTakeoffTool.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/GuidedGoToTool.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/GuidedGoToTool.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/GuidedRTLTool.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/GuidedRTLTool.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/GuidedLandTool.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/GuidedLandTool.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/GuidedOrbitTool.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/GuidedOrbitTool.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/RegisterTools.h
         ${CMAKE_CURRENT_SOURCE_DIR}/RegisterTools.cpp
 )
