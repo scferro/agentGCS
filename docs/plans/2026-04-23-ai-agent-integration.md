@@ -14,7 +14,7 @@
 
 **Principle:** Every PR does ONE thing and has a clear test/verification. More small PRs are better than fewer large ones.
 
-**Reorder rationale (Apr 24):** Model management was PR 17 (Phase 5) in the original plan — too late. Without settings/model downloader, there's no way for a user to actually *use* the AI agent in QGC. Moved it to PR 7 so that by the time we build the UI (PR 14+), the backend is fully functional end-to-end.
+**Reorder rationale (Apr 24):** Model management was originally a late phase (Phase 5) — too late. Without settings/model downloader, there's no way for a user to actually *use* the AI agent in QGC. Moved it to PR 7 so that by the time we build the UI (PR 15+), the backend is fully functional end-to-end. Grammar-constrained generation moved to PR 14 (before UI) so the LLM backend is complete before we build the chat interface.
 
 || PR | Phase | Tasks | Scope | Test Method | Est. Size | Status ||
 ||----|-------|-------|-------|-------------|-----------|--------|-
@@ -23,19 +23,19 @@
 || 3 | 1 | 1.1 | LLMEngine model loading + unloading | CTest: load a GGUF model | Small | ✅ Done ||
 || 4 | 1 | 1.2 | LLMEngine streaming completion | CTest: token signals fire | Small | ✅ Done ||
 ||| 5 | 1 | 1.3 | LLMEngine tool calling support | CTest: tool call parsed + emitted | Small | ✅ Done ||
-| 5b | 1 | 1.4 | LLMEngine grammar-constrained generation + streaming tool detection | CTest: constrained output + incremental parse | Medium | 📋 Queued |
-| 6 | 5→1.5 | 5.1–5.2 | **Settings panel + model downloader** | Persist test + small download | Medium | ✅ Done |
-| 7 | 2 | 2.1 | AgentToolBase + Registry | CTest: filtering logic | Small | ✅ Done |
-| 8→10 | 2 | 2.2 | 7 mission "add" tools | CTest: schema + availability | Medium | ✅ Done |
-| 9→11 | 2 | 2.3–2.4 | 4 edit tools + 5 guided tools | CTest: schema + availability | Medium | ✅ Done |
-| 10→12 | 3 | 3.1 | AgentController with ReAct loop | CTest: mock LLM cycle | Medium | ✅ Done |
-| 11→13 | 3 | 3.2 | System prompts + context injection | CTest: expected key presence | Small | 📋 Queued |
-| 12→14 | 4 | 4.4 + 4.2–4.3 | ChatView + ActionCard + SlideToAccept | qmllint + manual | Small | 📋 Queued |
-| 13→15 | 4 | 4.1+4.5 | Sidebar + MainWindow integration | qmllint + X11 visual | Small | 📋 Queued |
-| 14→16 | 6 | 6.1–6.2 | Safety validator + map overlay | CTest safety + manual map | Medium | 📋 Queued |
-| 15→17 | 6 | 6.3 | Multimodal input stub | Build compiles | Tiny | 📋 Queued |
+|| 6 | 5→1.5 | 5.1–5.2 | **Settings panel + model downloader** | Persist test + small download | Medium | ✅ Done ||
+|| 7 | 2 | 2.1 | AgentToolBase + Registry | CTest: filtering logic | Small | ✅ Done ||
+|| 8→10 | 2 | 2.2 | 7 mission "add" tools | CTest: schema + availability | Medium | ✅ Done ||
+|| 9→11 | 2 | 2.3–2.4 | 4 edit tools + 5 guided tools | CTest: schema + availability | Medium | ✅ Done ||
+|| 10→12 | 3 | 3.1 | AgentController with ReAct loop | CTest: mock LLM cycle | Medium | ✅ Done ||
+|| 11→13 | 3 | 3.2 | System prompts + context injection | CTest: expected key presence | Small | ✅ Done ||
+|| 14 | 1 | 1.4 | Grammar-constrained generation + streaming tool detection | CTest: constrained output + incremental parse | Medium | 📋 Queued ||
+|| 15 | 4 | 4.4 + 4.2–4.3 | ChatView + ActionCard + SlideToAccept | qmllint + manual | Small | 📋 Queued ||
+|| 16 | 4 | 4.1+4.5 | Sidebar + MainWindow integration | qmllint + X11 visual | Small | 📋 Queued ||
+|| 17 | 6 | 6.1–6.2 | Safety validator + map overlay | CTest safety + manual map | Medium | 📋 Queued ||
+|| 18 | 6 | 6.3 | Multimodal input stub | Build compiles | Tiny | 📋 Queued ||
 
-**Total: 16 PRs, 24 tasks**
+**Total: 18 PRs, 24 tasks**
 
 ### Test Models
 
@@ -359,7 +359,7 @@ git commit -m "feat: add tool definition schema support for Gemma 4 tool calling
 
 ---
 
-### Task 1.4 [PR 5b]: Grammar-constrained generation + streaming tool detection
+### Task 1.4 [PR 14]: Grammar-constrained generation + streaming tool detection
 
 **Objective:** Enhance `LLMEngine::runCompletion` to use llama.cpp's grammar-constrained generation and lazy grammar triggers so that tool call outputs are always syntactically valid, and enable incremental/streaming tool call detection so the agent can react faster.
 
@@ -910,7 +910,7 @@ git commit -m "feat: add system prompts and real-time state context injection"
 
 ## Phase 4 — QML Chat Sidebar UI
 
-### Task 4.4 [PR 14]: Create AIAgentSlideToAccept — safety confirmation widget
+### Task 4.4 [PR 15]: Create AIAgentSlideToAccept — safety confirmation widget
 
 **Objective:** Implement the slide-to-accept gesture that prevents accidental action approval. This is a standalone component with no backend dependency — good to ship first.
 
@@ -993,7 +993,7 @@ git commit -m "feat: implement slide-to-accept safety confirmation widget"
 
 ---
 
-### Task 4.2–4.3 [PR 15]: Create AIAgentChatView + AIAgentActionCard
+### Task 4.2–4.3 [PR 16]: Create AIAgentChatView + AIAgentActionCard
 
 **Objective:** Chat interface with scrollable message history, user input field, action approval cards.
 
@@ -1127,7 +1127,7 @@ git commit -m "feat: implement AIAgentChatView with message list and AIAgentActi
 
 ---
 
-### Task 4.1+4.5 [PR 16]: AIAgentSidebar + MainWindow integration
+### Task 4.1+4.5 [PR 17]: AIAgentSidebar + MainWindow integration
 
 **Objective:** Build the collapsible sidebar that slides in from the left, and integrate it into MainWindow with mode switching.
 
@@ -1303,7 +1303,7 @@ git commit -m "feat: add AI Agent settings panel, model downloader, and FactGrou
 
 ## Phase 6 — Polish & Safety
 
-### Task 6.1 [PR 17]: Implement action preview on map
+### Task 6.1 [PR 18]: Implement action preview on map
 
 **Objective:** When proposed actions are staged, show visual cues on the QGC map (e.g., new waypoints, takeoff marker, survey polygon).
 
@@ -1337,7 +1337,7 @@ git commit -m "feat: add map overlay preview for proposed AI agent actions"
 
 ---
 
-### Task 6.2 [PR 17]: Safety validation layer
+### Task 6.2 [PR 18]: Safety validation layer
 
 **Objective:** Before any action is presented to the user for approval, run safety checks and display warnings.
 
@@ -1381,7 +1381,7 @@ git commit -m "feat: add safety validation layer for proposed agent actions"
 
 ---
 
-### Task 6.3 [PR 17]: Multimodal input (future-proofing)
+### Task 6.3 [PR 18]: Multimodal input (future-proofing)
 
 **Objective:** Since Gemma 4 is multimodal (any-to-any), prepare the architecture for future video/image input.
 
