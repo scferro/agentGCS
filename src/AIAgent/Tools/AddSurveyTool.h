@@ -14,11 +14,10 @@ public:
     QString execute(const QJsonObject& args) override;
 
     bool availableInMode(const QString& mode) const override {
-        Q_UNUSED(mode);
-        return true;  // Available in both modes
+        return mode == "mission";  // Survey requires complex mission item setup
     }
     bool availableForVehicle(const QString& vehicleType) const override {
-        Q_UNUSED(vehicleType);
-        return true;  // All vehicle types support survey
+        // Fixed-wing and multi-rotor only (per mav-agent filtering)
+        return vehicleType == "fixed_wing" || vehicleType == "rotor";
     }
 };
